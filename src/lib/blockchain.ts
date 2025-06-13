@@ -1,4 +1,4 @@
-import { ethers, Contract, BrowserProvider, JsonRpcSigner } from 'ethers';
+import { ethers, Contract, BrowserProvider, JsonRpcSigner } from "ethers";
 
 // Contract address and ABI
 export const CONTRACT_ADDRESS = '0xe7B56601507483b701d6927C65E53C4113cC5AA4';
@@ -25,19 +25,19 @@ export const CONTRACT_ABI = [
   "function tokenURI(uint256 tokenId) view returns (string)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function tokenLikes(uint256 tokenId, address user) view returns (bool)",
-  
+
   // Write functions
   "function createToken(string tokenURI, uint256 price, string category) payable returns (uint256)",
   "function createMarketSale(uint256 tokenId) payable",
   "function likeNFT(uint256 tokenId)",
   "function unlikeNFT(uint256 tokenId)",
   "function updateListingPrice(uint256 _listingPrice) payable",
-  
+
   // Events
   "event MarketItemCreated(uint256 indexed tokenId, address seller, address owner, uint256 price, bool sold, string category)",
   "event MarketItemSold(uint256 indexed tokenId, address seller, address buyer, uint256 price)",
   "event NFTLiked(uint256 indexed tokenId, address liker)",
-  "event NFTUnliked(uint256 indexed tokenId, address unliker)"
+  "event NFTUnliked(uint256 indexed tokenId, address unliker)",
 ];
 
 // Types
@@ -169,15 +169,17 @@ class BlockchainService {
 
   // Check if wallet is connected
   public async isWalletConnected(): Promise<boolean> {
-    if (typeof window === 'undefined' || !window.ethereum) {
+    if (typeof window === "undefined" || !window.ethereum) {
       return false;
     }
 
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      const accounts = await window.ethereum.request({
+        method: "eth_accounts",
+      });
       return accounts && accounts.length > 0;
     } catch (error) {
-      console.error('Error checking wallet connection:', error);
+      console.error("Error checking wallet connection:", error);
       return false;
     }
   }
@@ -202,7 +204,7 @@ class BlockchainService {
       
       // Request account access
       const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts'
+        method: "eth_requestAccounts",
       });
 
       if (accounts && accounts.length > 0) {
@@ -235,8 +237,8 @@ class BlockchainService {
 
   // Initialize ethers provider and signer
   private async initializeProvider(): Promise<void> {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      throw new Error('MetaMask is not installed');
+    if (typeof window === "undefined" || !window.ethereum) {
+      throw new Error("MetaMask is not installed");
     }
 
     try {
@@ -298,7 +300,7 @@ class BlockchainService {
     try {
       return await this.signer!.getAddress();
     } catch (error) {
-      console.error('Error getting current account:', error);
+      console.error("Error getting current account:", error);
       return null;
     }
   }
@@ -329,7 +331,7 @@ class BlockchainService {
     description: string,
     metadataUrl: string,
     price: string,
-    category: string
+    category: string,
   ): Promise<MintResult> {
     if (!this.contract || !this.signer) {
       throw new Error('Wallet not connected. Please connect your wallet first.');
@@ -342,7 +344,7 @@ class BlockchainService {
         description,
         metadataUrl,
         price,
-        category
+        category,
       });
 
       // Verify we're still on the correct network
@@ -354,15 +356,15 @@ class BlockchainService {
       // Get listing price
       const listingPriceEth = await this.getListingPrice();
       const listingPrice = ethers.parseEther(listingPriceEth);
-      
+
       // Convert price from ETH to Wei
       const priceInWei = ethers.parseEther(price);
 
-      console.log('Transaction parameters:', {
+      console.log("Transaction parameters:", {
         tokenURI: metadataUrl,
         priceInWei: priceInWei.toString(),
         category,
-        listingPrice: listingPrice.toString()
+        listingPrice: listingPrice.toString(),
       });
 
       // Estimate gas first
@@ -373,7 +375,7 @@ class BlockchainService {
           metadataUrl,
           priceInWei,
           category,
-          { value: listingPrice }
+          { value: listingPrice },
         );
         console.log('Estimated gas:', gasEstimate.toString());
       } catch (gasError: any) {
@@ -395,24 +397,24 @@ class BlockchainService {
         metadataUrl,
         priceInWei,
         category,
-        { 
+        {
           value: listingPrice,
-          gasLimit: gasEstimate * BigInt(120) / BigInt(100) // Add 20% buffer
-        }
+          gasLimit: (gasEstimate * BigInt(120)) / BigInt(100), // Add 20% buffer
+        },
       );
 
       console.log('Transaction sent:', transaction.hash);
       console.log('Waiting for confirmation...');
 
       const receipt = await transaction.wait();
-      console.log('Transaction confirmed:', receipt);
-      
+      console.log("Transaction confirmed:", receipt);
+
       // Extract token ID from the event logs
       const tokenId = await this.extractTokenIdFromReceipt(receipt);
 
       return {
         tokenId: tokenId,
-        transactionHash: receipt.hash
+        transactionHash: receipt.hash,
       };
     } catch (error: any) {
       console.error('Error minting NFT:', error);
@@ -441,7 +443,7 @@ class BlockchainService {
       const event = receipt.logs.find((log: any) => {
         try {
           const parsedLog = this.contract!.interface.parseLog(log);
-          return parsedLog?.name === 'MarketItemCreated';
+          return parsedLog?.name === "MarketItemCreated";
         } catch {
           return false;
         }
@@ -457,12 +459,15 @@ class BlockchainService {
         const totalTokens = await this.contract!.getTotalTokens();
         return Number(totalTokens);
       } catch (fallbackError) {
-        console.warn('Could not get total tokens for token ID fallback:', fallbackError);
+        console.warn(
+          "Could not get total tokens for token ID fallback:",
+          fallbackError,
+        );
       }
 
       return 0;
     } catch (error) {
-      console.error('Error extracting token ID:', error);
+      console.error("Error extracting token ID:", error);
       return 0;
     }
   }
@@ -475,15 +480,15 @@ class BlockchainService {
 
     try {
       const priceInWei = ethers.parseEther(price);
-      
+
       const transaction = await this.contract.createMarketSale(tokenId, {
-        value: priceInWei
+        value: priceInWei,
       });
 
       const receipt = await transaction.wait();
 
       return {
-        transactionHash: receipt.hash
+        transactionHash: receipt.hash,
       };
     } catch (error: any) {
       console.error('Error buying NFT:', error);
@@ -531,7 +536,10 @@ class BlockchainService {
   }
 
   // Check if user has liked an NFT
-  public async hasLikedNFT(tokenId: number, userAddress: string): Promise<boolean> {
+  public async hasLikedNFT(
+    tokenId: number,
+    userAddress: string,
+  ): Promise<boolean> {
     try {
       const contract = this.contract || this.readOnlyContract;
       if (!contract) {
@@ -541,7 +549,7 @@ class BlockchainService {
       const finalContract = this.contract || this.readOnlyContract;
       return await finalContract!.tokenLikes(tokenId, userAddress);
     } catch (error) {
-      console.error('Error checking like status:', error);
+      console.error("Error checking like status:", error);
       return false;
     }
   }
@@ -564,10 +572,10 @@ class BlockchainService {
         price: ethers.formatEther(item.price),
         sold: item.sold,
         category: item.category,
-        likes: Number(item.likes)
+        likes: Number(item.likes),
       }));
     } catch (error) {
-      console.error('Error fetching market items:', error);
+      console.error("Error fetching market items:", error);
       return [];
     }
   }
@@ -580,7 +588,7 @@ class BlockchainService {
 
     try {
       const items = await this.contract.fetchMyNFTs();
-      
+
       return items.map((item: any) => ({
         tokenId: Number(item.tokenId),
         seller: item.seller,
@@ -588,10 +596,10 @@ class BlockchainService {
         price: ethers.formatEther(item.price),
         sold: item.sold,
         category: item.category,
-        likes: Number(item.likes)
+        likes: Number(item.likes),
       }));
     } catch (error) {
-      console.error('Error fetching my NFTs:', error);
+      console.error("Error fetching my NFTs:", error);
       return [];
     }
   }
@@ -604,7 +612,7 @@ class BlockchainService {
 
     try {
       const items = await this.contract.fetchItemsListed();
-      
+
       return items.map((item: any) => ({
         tokenId: Number(item.tokenId),
         seller: item.seller,
@@ -612,10 +620,10 @@ class BlockchainService {
         price: ethers.formatEther(item.price),
         sold: item.sold,
         category: item.category,
-        likes: Number(item.likes)
+        likes: Number(item.likes),
       }));
     } catch (error) {
-      console.error('Error fetching listed items:', error);
+      console.error("Error fetching listed items:", error);
       return [];
     }
   }
@@ -634,12 +642,12 @@ class BlockchainService {
       // Fetch metadata from IPFS or other storage
       const response = await fetch(tokenURI);
       if (!response.ok) {
-        throw new Error('Failed to fetch metadata');
+        throw new Error("Failed to fetch metadata");
       }
 
       return await response.json();
     } catch (error) {
-      console.error('Error getting token metadata:', error);
+      console.error("Error getting token metadata:", error);
       return null;
     }
   }
@@ -662,49 +670,61 @@ class BlockchainService {
         price: ethers.formatEther(item.price),
         sold: item.sold,
         category: item.category,
-        likes: Number(item.likes)
+        likes: Number(item.likes),
       };
     } catch (error) {
-      console.error('Error getting market item:', error);
+      console.error("Error getting market item:", error);
       return null;
     }
   }
 
   // Listen to contract events
   public setupEventListeners(callbacks: {
-    onMarketItemCreated?: (tokenId: number, seller: string, price: string) => void;
-    onMarketItemSold?: (tokenId: number, seller: string, buyer: string, price: string) => void;
+    onMarketItemCreated?: (
+      tokenId: number,
+      seller: string,
+      price: string,
+    ) => void;
+    onMarketItemSold?: (
+      tokenId: number,
+      seller: string,
+      buyer: string,
+      price: string,
+    ) => void;
     onNFTLiked?: (tokenId: number, liker: string) => void;
   }): void {
     const contract = this.contract || this.readOnlyContract;
     if (!contract) {
-      console.warn('Contract not initialized for event listeners');
+      console.warn("Contract not initialized for event listeners");
       return;
     }
 
     if (callbacks.onMarketItemCreated) {
-      contract.on('MarketItemCreated', (tokenId, seller, owner, price, sold, category) => {
-        callbacks.onMarketItemCreated!(
-          Number(tokenId),
-          seller,
-          ethers.formatEther(price)
-        );
-      });
+      contract.on(
+        "MarketItemCreated",
+        (tokenId, seller, owner, price, sold, category) => {
+          callbacks.onMarketItemCreated!(
+            Number(tokenId),
+            seller,
+            ethers.formatEther(price),
+          );
+        },
+      );
     }
 
     if (callbacks.onMarketItemSold) {
-      contract.on('MarketItemSold', (tokenId, seller, buyer, price) => {
+      contract.on("MarketItemSold", (tokenId, seller, buyer, price) => {
         callbacks.onMarketItemSold!(
           Number(tokenId),
           seller,
           buyer,
-          ethers.formatEther(price)
+          ethers.formatEther(price),
         );
       });
     }
 
     if (callbacks.onNFTLiked) {
-      contract.on('NFTLiked', (tokenId, liker) => {
+      contract.on("NFTLiked", (tokenId, liker) => {
         callbacks.onNFTLiked!(Number(tokenId), liker);
       });
     }
@@ -741,12 +761,12 @@ export const blockchainService = new BlockchainService();
 
 // Utility functions
 export const formatAddress = (address: string): string => {
-  if (!address) return '';
+  if (!address) return "";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
 export const formatPrice = (price: string | number): string => {
-  const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+  const numPrice = typeof price === "string" ? parseFloat(price) : price;
   return `${numPrice.toFixed(4)} ETH`;
 };
 
@@ -764,18 +784,18 @@ export const getSupportedNetworks = () => {
 };
 
 export const switchNetwork = async (chainId: string): Promise<void> => {
-  if (typeof window === 'undefined' || !window.ethereum) {
-    throw new Error('MetaMask is not installed');
+  if (typeof window === "undefined" || !window.ethereum) {
+    throw new Error("MetaMask is not installed");
   }
 
   try {
     await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
+      method: "wallet_switchEthereumChain",
       params: [{ chainId }],
     });
   } catch (error: any) {
     if (error.code === 4902) {
-      throw new Error('Network not added to MetaMask');
+      throw new Error("Network not added to MetaMask");
     }
     throw error;
   }

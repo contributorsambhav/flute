@@ -118,4 +118,8 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  button {
+    @apply cursor-pointer hover:opacity-90 transition-all duration-200 ease-out;
+  }
 }

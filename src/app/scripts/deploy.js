@@ -6,9 +6,12 @@ async function main() {
 
   // Get the ContractFactory and Signers
   const [deployer] = await ethers.getSigners();
-  
+
   console.log("Deploying contracts with the account:", deployer.address);
-  console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString());
+  console.log(
+    "Account balance:",
+    (await deployer.provider.getBalance(deployer.address)).toString(),
+  );
 
   // Deploy the contract
   const ArtiFusionNFT = await ethers.getContractFactory("ArtiFusionNFT");
@@ -24,7 +27,7 @@ async function main() {
   console.log("Listing price:", ethers.formatEther(listingPrice), "ETH");
 
   // Save the contract address and ABI
-  const fs = require('fs');
+  const fs = require("fs");
   const contractsDir = __dirname + "/../src/contracts";
 
   if (!fs.existsSync(contractsDir)) {
@@ -34,14 +37,15 @@ async function main() {
   // Save contract address
   fs.writeFileSync(
     contractsDir + "/contract-address.json",
-    JSON.stringify({ ArtiFusionNFT: contractAddress }, null, 2)
+    JSON.stringify({ ArtiFusionNFT: contractAddress }, null, 2),
   );
 
   // Save ABI
-  const ArtiFusionNFTArtifact = await hre.artifacts.readArtifact("ArtiFusionNFT");
+  const ArtiFusionNFTArtifact =
+    await hre.artifacts.readArtifact("ArtiFusionNFT");
   fs.writeFileSync(
     contractsDir + "/ArtiFusionNFT.json",
-    JSON.stringify(ArtiFusionNFTArtifact, null, 2)
+    JSON.stringify(ArtiFusionNFTArtifact, null, 2),
   );
 
   console.log("Contract address and ABI saved to src/contracts/");
