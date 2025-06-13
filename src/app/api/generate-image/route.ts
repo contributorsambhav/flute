@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
         style: style,
         service: "Pollinations AI (Free)",
       });
-    } catch (fetchError) {
-      // If direct fetch fails, return the URL for direct loading
+    } catch (fetchError:any) {
+      console.log(`Error fetching image: ${fetchError.message}`);
       return NextResponse.json({
         imageUrl: imageUrl,
         prompt: enhancedPrompt,

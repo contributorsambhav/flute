@@ -85,7 +85,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
         setNftImage(result);
       };
       reader.readAsDataURL(file);
-      setIsUploadedToIpfs(false);
+      setIsUploadedToIPFS(false);
       setIpfsData(null);
     }
   };
@@ -98,7 +98,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
 
     setIsGenerating(true);
     setNftImage("");
-    setIsUploadedToIpfs(false);
+    setIsUploadedToIPFS(false);
     setIpfsData(null);
 
     try {
@@ -202,7 +202,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
 
       const data: IPFSUploadResult = await response.json();
       setIpfsData(data);
-      setIsUploadedToIpfs(true);
+      setIsUploadedToIPFS(true);
 
       alert(
         `Successfully uploaded to IPFS!\nImage: ${data.imageUrl}\nMetadata: ${data.metadataUrl}`,
@@ -312,7 +312,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
     setPrompt("");
     setUploadedFile(null);
     setIpfsData(null);
-    setIsUploadedToIpfs(false);
+    setIsUploadedToIPFS(false);
   };
 
   return (
@@ -349,7 +349,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
           <Button
             variant={creationMode === "upload" ? "default" : "outline"}
             onClick={() => handleCreationModeChange("upload")}
-            className="h-9text-sm sm:text-base bg-neutral-800 border-neutral-700 hover:bg-neutral-700"
+            className="h-9 text-sm sm:text-base bg-neutral-800 border-neutral-700 hover:bg-neutral-700"
           >
             <Upload className="mr-2 h-4 w-4" />
             Upload Image
@@ -640,8 +640,8 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 

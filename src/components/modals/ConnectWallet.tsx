@@ -41,7 +41,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
   isOpen,
   onClose,
   onConnect,
-  isConnecting,,
+  isConnecting,
   walletInfo
 }) => {
   const [networkError, setNetworkError] = useState<string | null>(null);
