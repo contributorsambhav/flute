@@ -474,8 +474,6 @@ class BlockchainService {
       return 0;
     }
   }
-
-
   public async hasLikedNFT(
     tokenId: number,
     userAddress: string,
