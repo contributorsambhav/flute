@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Palette, Sparkles, Upload, ImageIcon, Cloud, CheckCircle } from 'lucide-react';
+import { Loader2, Palette, Sparkles, Upload, ImageIcon, Cloud, CheckCircle, AlertTriangle } from 'lucide-react';
 import { blockchainService } from '@/lib/blockchain';
 
 type ArtStyle = 'realistic' | 'abstract' | 'cyberpunk' | 'fantasy' | 'minimalist';
@@ -15,6 +15,7 @@ type CreationMode = 'upload' | 'generate';
 interface CreateNFTProps {
   isConnected: boolean;
   account: string;
+  onConnectionChange?: () => void; // Add callback for connection changes
 }
 
 interface IPFSUploadResult {
@@ -24,7 +25,7 @@ interface IPFSUploadResult {
   metadataCid: string;
 }
 
-const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account }) => {
+const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectionChange }) => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isUploadingToIPFS, setIsUploadingToIPFS] = useState<boolean>(false);
   const [isMinting, setIsMinting] = useState<boolean>(false);
@@ -38,6 +39,34 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [ipfsData, setIpfsData] = useState<IPFSUploadResult | null>(null);
   const [isUploadedToIPFS, setIsUploadedToIPFS] = useState<boolean>(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>(''); // Add connection status tracking
+
+  // Verify wallet connection status on mount and when account changes
+  useEffect(() => {
+    const verifyConnection = async () => {
+      if (isConnected && account) {
+        try {
+          const currentAccount = await blockchainService.getCurrentAccount();
+          if (currentAccount?.toLowerCase() !== account.toLowerCase()) {
+            console.warn('Account mismatch detected, reinitializing connection...');
+            setConnectionStatus('Account mismatch - please reconnect');
+            if (onConnectionChange) {
+              onConnectionChange();
+            }
+          } else {
+            setConnectionStatus('Connected and verified');
+          }
+        } catch (error) {
+          console.error('Connection verification failed:', error);
+          setConnectionStatus('Connection verification failed');
+        }
+      } else {
+        setConnectionStatus('Not connected');
+      }
+    };
+
+    verifyConnection();
+  }, [isConnected, account, onConnectionChange]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
@@ -200,6 +229,17 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account }) => {
     setIsMinting(true);
     
     try {
+      // Double-check wallet connection before minting
+      const currentAccount = await blockchainService.getCurrentAccount();
+      if (!currentAccount) {
+        // Try to reconnect
+        const reconnectedAccount = await blockchainService.connectWallet();
+        if (!reconnectedAccount) {
+          throw new Error("Failed to connect wallet. Please try connecting again.");
+        }
+        console.log('Wallet reconnected:', reconnectedAccount);
+      }
+
       const category = creationMode === 'generate' ? "ai-generated" : "uploaded";
 
       // Use the blockchain service directly to mint the NFT
@@ -211,24 +251,45 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account }) => {
         category
       );
       
+      console.log('Mint result:', result);
       alert(`NFT successfully minted!\nToken ID: ${result.tokenId}\nTransaction Hash: ${result.transactionHash}`);
       
       // Reset form
-      setNftTitle('');
-      setNftDescription('');
-      setNftPrice('');
-      setNftImage('');
-      setPrompt('');
-      setUploadedFile(null);
-      setIpfsData(null);
-      setIsUploadedToIPFS(false);
+      resetForm();
       
     } catch (error) {
       console.error('Error minting NFT:', error);
-      alert(`Error minting NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Provide more specific error handling
+      let errorMessage = 'Unknown error occurred';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      // Check if it's a connection issue
+      if (errorMessage.includes('Wallet not connected') || errorMessage.includes('not connected')) {
+        errorMessage += '\n\nTip: Try disconnecting and reconnecting your wallet, then refresh the page.';
+        // Trigger connection state update
+        if (onConnectionChange) {
+          onConnectionChange();
+        }
+      }
+      
+      alert(`Error minting NFT: ${errorMessage}`);
     } finally {
       setIsMinting(false);
     }
+  };
+
+  const resetForm = (): void => {
+    setNftTitle('');
+    setNftDescription('');
+    setNftPrice('');
+    setNftImage('');
+    setPrompt('');
+    setUploadedFile(null);
+    setIpfsData(null);
+    setIsUploadedToIPFS(false);
   };
 
   const handleStyleChange = (value: string): void => {
@@ -254,6 +315,24 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account }) => {
         <CardDescription className="text-white/70">
           Upload your own artwork or generate unique art using AI to create NFTs.
         </CardDescription>
+        
+        {/* Connection Status Indicator */}
+        {connectionStatus && (
+          <div className={`text-sm px-3 py-1 rounded-full inline-flex items-center w-fit ${
+            connectionStatus.includes('verified') || connectionStatus.includes('Connected') 
+              ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+              : connectionStatus.includes('mismatch') || connectionStatus.includes('failed')
+              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+              : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+          }`}>
+            {connectionStatus.includes('verified') || connectionStatus.includes('Connected') ? (
+              <CheckCircle className="w-3 h-3 mr-1" />
+            ) : (
+              <AlertTriangle className="w-3 h-3 mr-1" />
+            )}
+            {connectionStatus}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-4 mb-6">
