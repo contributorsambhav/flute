@@ -1,14 +1,14 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/app/components/ui/select";
 import { Heart, Eye, ExternalLink } from "lucide-react";
 import { blockchainService } from "@/lib/blockchain";
 import { formatAddress } from "@/lib/blockchain";

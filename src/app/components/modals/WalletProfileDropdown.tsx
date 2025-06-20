@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/app/components/ui/button";
 import { Copy, LogOut, ChevronDown } from "lucide-react";
 
 interface WalletProfileDropdownProps {

@@ -8,11 +8,11 @@ declare global {
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import NFTMarketplace from "@/components/pages/NFTmarketplace";
-import CreateNFT from "@/components/pages/CreateNFT";
-import Navbar from "@/components/navbar";
-import MyNFTs from "@/components/pages/MyNFTs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import NFTMarketplace from "@/app/components/pages/NFTmarketplace";
+import CreateNFT from "@/app/components/pages/CreateNFT";
+import Navbar from "@/app/components/navbar";
+import MyNFTs from "@/app/components/pages/MyNFTs";
 
 const Home: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -46,26 +46,7 @@ const Home: React.FC = () => {
       />
       <div className="px-4 py-8 pt-24">
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-8 bg-neutral-800 text-white">
-            <TabsTrigger
-              value="marketplace"
-              className="text-white data-[state=active]:text-neutral-800 "
-            >
-              Marketplace
-            </TabsTrigger>
-            <TabsTrigger
-              value="create"
-              className="text-white data-[state=active]:text-neutral-800"
-            >
-              Create NFT
-            </TabsTrigger>
-            <TabsTrigger
-              value="my-nfts"
-              className="text-white data-[state=active]:text-neutral-800"
-            >
-              My NFTs
-            </TabsTrigger>
-          </TabsList>
+          
 
           <TabsContent value="marketplace" className="space-y-6">
             <NFTMarketplace isConnected={isConnected} account={account} />
