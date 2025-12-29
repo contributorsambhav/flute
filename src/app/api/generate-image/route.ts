@@ -1,9 +1,14 @@
-// app/api/generate-image/route.ts
 import { NextRequest, NextResponse } from "next/server";
+
+type GenerateImageRequestBody = {
+  prompt: string;
+  style?: string;
+};
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, style } = await request.json();
+    const body = (await request.json()) as GenerateImageRequestBody;
+    const { prompt, style } = body;
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -26,13 +31,17 @@ export async function POST(request: NextRequest) {
         "minimalist design, clean lines, simple composition, elegant style",
     };
 
-    const enhancedPrompt = `${prompt}, ${stylePrompts[style] || stylePrompts.realistic}, high quality digital art`;
+    const enhancedPrompt = `${prompt}, ${
+      stylePrompts[style ?? ""] ?? stylePrompts.realistic
+    }, high quality digital art`;
 
-    // Pollinations.ai - completely free, no API key needed
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=512&height=512&seed=${Math.floor(Math.random() * 1000000)}`;
+    // Pollinations.ai (free, no API key)
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+      enhancedPrompt,
+    )}?width=512&height=512&seed=${Math.floor(Math.random() * 1_000_000)}`;
 
     try {
-      // Fetch the image to convert to base64
+      // Fetch image to convert to base64
       const imageResponse = await fetch(imageUrl);
 
       if (!imageResponse.ok) {
@@ -46,21 +55,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         imageUrl: dataUrl,
         prompt: enhancedPrompt,
-        style: style,
+        style: style ?? "realistic",
         service: "Pollinations AI (Free)",
       });
-    } catch (fetchError:any) {
-      console.log(`Error fetching image: ${fetchError.message}`);
+    } catch (fetchError: unknown) {
+      if (fetchError instanceof Error) {
+        console.error("Image fetch failed:", fetchError.message);
+      } else {
+        console.error("Image fetch failed: Unknown error");
+      }
+
+      // Fallback to direct URL
       return NextResponse.json({
-        imageUrl: imageUrl,
+        imageUrl,
         prompt: enhancedPrompt,
-        style: style,
+        style: style ?? "realistic",
         service: "Pollinations AI (Free)",
-        note: "Direct URL - image loads directly in browser",
+        note: "Direct URL returned – image loads directly in browser",
       });
     }
-  } catch (error) {
-    console.error("Error generating image:", error);
+  } catch (error: unknown) {
+    console.error(
+      "Error generating image:",
+      error instanceof Error ? error.message : error,
+    );
 
     return NextResponse.json(
       { error: "Failed to generate image. Please try again." },

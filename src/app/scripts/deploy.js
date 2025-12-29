@@ -1,5 +1,10 @@
+import { dirname } from "path";
 // scripts/deploy.js
-const { ethers } = require("hardhat");
+import { ethers } from "hardhat";
+import { fileURLToPath } from "url";
+import fs from "fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function main() {
   console.log("Deploying ArtiFusion NFT Marketplace...");
@@ -27,7 +32,6 @@ async function main() {
   console.log("Listing price:", ethers.formatEther(listingPrice), "ETH");
 
   // Save the contract address and ABI
-  const fs = require("fs");
   const contractsDir = __dirname + "/../src/contracts";
 
   if (!fs.existsSync(contractsDir)) {

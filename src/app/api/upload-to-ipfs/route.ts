@@ -1,8 +1,9 @@
-// api/upload-to-ipfs.ts
 import { NextRequest, NextResponse } from "next/server";
 
-// Upload file to Pinata IPFS
-async function uploadToPinata(buffer: Buffer, filename?: string) {
+/**
+ * Upload file (binary) to Pinata IPFS
+ */
+async function uploadToPinata(buffer: Buffer, filename?: string): Promise<string> {
   if (!process.env.PINATA_JWT) {
     throw new Error(
       "Missing Pinata credentials. Set PINATA_JWT environment variable",
@@ -10,20 +11,19 @@ async function uploadToPinata(buffer: Buffer, filename?: string) {
   }
 
   const formData = new FormData();
-  const blob = new Blob([buffer]);
-  formData.append("file", blob, filename || "file");
+  const blob = new Blob([new Uint8Array(buffer)]);
 
-  // Optional: Add pinata options
-  const pinataOptions = JSON.stringify({
-    cidVersion: 0,
-  });
-  formData.append("pinataOptions", pinataOptions);
+  formData.append("file", blob, filename ?? "file");
 
-  // Optional: Add pinata metadata
-  const pinataMetadata = JSON.stringify({
-    name: filename || "Uploaded File",
-  });
-  formData.append("pinataMetadata", pinataMetadata);
+  formData.append(
+    "pinataOptions",
+    JSON.stringify({ cidVersion: 0 }),
+  );
+
+  formData.append(
+    "pinataMetadata",
+    JSON.stringify({ name: filename ?? "Uploaded File" }),
+  );
 
   const response = await fetch(
     "https://api.pinata.cloud/pinning/pinFileToIPFS",
@@ -43,22 +43,27 @@ async function uploadToPinata(buffer: Buffer, filename?: string) {
     );
   }
 
-  const result = await response.json();
+  const result: { IpfsHash: string } = await response.json();
   return result.IpfsHash;
 }
 
-// Upload JSON data to Pinata IPFS
-async function uploadJSONToPinata(jsonData: any, name?: string) {
+/**
+ * Upload JSON metadata to Pinata IPFS
+ */
+async function uploadJSONToPinata(
+  jsonData: Record<string, unknown>,
+  name?: string,
+): Promise<string> {
   if (!process.env.PINATA_JWT) {
     throw new Error(
       "Missing Pinata credentials. Set PINATA_JWT environment variable",
     );
   }
 
-  const data = {
+  const payload = {
     pinataContent: jsonData,
     pinataMetadata: {
-      name: name || "metadata.json",
+      name: name ?? "metadata.json",
     },
     pinataOptions: {
       cidVersion: 0,
@@ -73,7 +78,7 @@ async function uploadJSONToPinata(jsonData: any, name?: string) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.PINATA_JWT}`,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     },
   );
 
@@ -84,13 +89,12 @@ async function uploadJSONToPinata(jsonData: any, name?: string) {
     );
   }
 
-  const result = await response.json();
+  const result: { IpfsHash: string } = await response.json();
   return result.IpfsHash;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate environment variables
     if (!process.env.PINATA_JWT) {
       return NextResponse.json(
         { error: "PINATA_JWT environment variable must be set" },
@@ -99,41 +103,40 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const metadata = formData.get("metadata") as string;
+    const file = formData.get("file");
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { error: "No file provided" },
+        { status: 400 },
+      );
     }
+
+    const metadataRaw = formData.get("metadata");
 
     console.log("Uploading file:", file.name, "Size:", file.size);
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Upload image to IPFS via Pinata
+    // Upload image
     const imageCid = await uploadToPinata(buffer, file.name);
     const imageUrl = `https://gateway.pinata.cloud/ipfs/${imageCid}`;
-    // Alternative gateway: `https://ipfs.io/ipfs/${imageCid}`
 
-    console.log("Image uploaded successfully:", imageCid);
-
-    if (metadata) {
+    if (typeof metadataRaw === "string") {
       try {
-        const metadataObj = JSON.parse(metadata);
-        const metadataWithImage = {
-          ...metadataObj,
+        const parsedMetadata = JSON.parse(metadataRaw) as Record<string, unknown>;
+
+        const metadataWithImage: Record<string, unknown> = {
+          ...parsedMetadata,
           image: imageUrl,
         };
 
-        // Upload metadata to IPFS via Pinata
         const metadataCid = await uploadJSONToPinata(
           metadataWithImage,
           "metadata.json",
         );
-        const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataCid}`;
-        // Alternative gateway: `https://ipfs.io/ipfs/${metadataCid}`
 
-        console.log("Metadata uploaded successfully:", metadataCid);
+        const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataCid}`;
 
         return NextResponse.json({
           imageUrl,
@@ -141,8 +144,12 @@ export async function POST(request: NextRequest) {
           imageCid,
           metadataCid,
         });
-      } catch (parseError) {
-        console.error("Error parsing metadata:", parseError);
+      } catch (parseError: unknown) {
+        console.error(
+          "Error parsing metadata:",
+          parseError instanceof Error ? parseError.message : parseError,
+        );
+
         return NextResponse.json(
           { error: "Invalid metadata JSON" },
           { status: 400 },
@@ -154,17 +161,16 @@ export async function POST(request: NextRequest) {
       imageUrl,
       imageCid,
     });
-  } catch (error) {
-    console.error("IPFS upload error:", error);
-
-    // Return more detailed error information
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error occurred";
+  } catch (error: unknown) {
+    console.error(
+      "IPFS upload error:",
+      error instanceof Error ? error.message : error,
+    );
 
     return NextResponse.json(
       {
         error: "Failed to upload to IPFS",
-        details: errorMessage,
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     );

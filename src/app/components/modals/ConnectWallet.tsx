@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { AlertCircle, ExternalLink, Loader2, Wallet, Wifi } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import React, { useEffect, useState } from 'react';
+
 import { Button } from '@/app/components/ui/button';
-import { Loader2, Wallet, X, ExternalLink, Wifi, AlertCircle } from 'lucide-react';
 
 interface WalletInfo {
   address: string;
@@ -97,20 +98,35 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
     }
   }, [walletInfo]);
 
-  const handleConnect = async (walletType: string) => {
-    try {
-      setNetworkError(null);
-      await onConnect(walletType);
-    } catch (error: any) {
-      if (error.code === 4902) {
-        setNetworkError('Please add this network to your wallet first');
-      } else if (error.code === -32002) {
-        setNetworkError('Please check your wallet for pending connection requests');
-      } else {
-        setNetworkError('Failed to connect wallet. Please try again.');
+const handleConnect = async (walletType: string) => {
+  try {
+    setNetworkError(null);
+    await onConnect(walletType);
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error
+    ) {
+      const { code } = error as { code?: number };
+
+      if (code === 4902) {
+        setNetworkError("Please add this network to your wallet first");
+        return;
+      }
+
+      if (code === -32002) {
+        setNetworkError(
+          "Please check your wallet for pending connection requests",
+        );
+        return;
       }
     }
-  };
+
+    setNetworkError("Failed to connect wallet. Please try again.");
+  }
+};
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

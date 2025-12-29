@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { AlertTriangle, CheckCircle, Cloud, ImageIcon, Loader2, Palette, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import React, { useEffect, useState } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import { Loader2, Palette, Sparkles, Upload, ImageIcon, Cloud, CheckCircle, AlertTriangle } from 'lucide-react';
 import { blockchainService } from '@/lib/blockchain';
 
 type ArtStyle =
@@ -634,7 +635,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
                 ipfsData &&
                 nftPrice.trim() && (
                   <p className="text-green-400 text-xs sm:text-sm text-center p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                    ✅ Ready to mint! Click "Mint NFT" to create your token
+                    ✅ Ready to mint! Click &quot;Mint NFT&quot; to create your token
                   </p>
                 )}
             </div>

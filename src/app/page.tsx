@@ -1,20 +1,15 @@
 "use client";
 
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
-
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, Suspense } from "react";
+import { Tabs, TabsContent } from "@/app/components/ui/tabs";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import NFTMarketplace from "@/app/components/pages/NFTmarketplace";
-import CreateNFT from "@/app/components/pages/CreateNFT";
-import Navbar from "@/app/components/navbar";
-import MyNFTs from "@/app/components/pages/MyNFTs";
 
-const Home: React.FC = () => {
+import CreateNFT from "@/app/components/pages/CreateNFT";
+import MyNFTs from "@/app/components/pages/MyNFTs";
+import NFTMarketplace from "@/app/components/pages/NFTmarketplace";
+import Navbar from "@/app/components/navbar";
+
+const HomeContent: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [account, setAccount] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("marketplace");
@@ -62,6 +57,14 @@ const Home: React.FC = () => {
         </Tabs>
       </div>
     </div>
+  );
+};
+
+const Home: React.FC = () => {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 };
 

@@ -1,7 +1,7 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
+
+import { ExternalLink, Heart } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -9,7 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
-import { Heart, Eye, ExternalLink } from "lucide-react";
+
+import { Button } from "@/app/components/ui/button";
+import Image from "next/image";
+import { Input } from "@/app/components/ui/input";
 import { blockchainService } from "@/lib/blockchain";
 import { formatAddress } from "@/lib/blockchain";
 
@@ -30,6 +33,16 @@ interface NFT {
     trait_type: string;
     value: string;
   }>;
+}
+
+interface BlockchainItem {
+  tokenId: number;
+  seller: string;
+  owner: string;
+  price: string;
+  sold: boolean;
+  likes: number;
+  category: string;
 }
 
 type Category =
@@ -53,22 +66,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
   const [likedNFTs, setLikedNFTs] = useState<Set<number>>(new Set());
   const [likingNFT, setLikingNFT] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (isConnected && account) {
-      loadMyNFTs();
-    } else {
-      setNfts([]);
-      setLoading(false);
-    }
-  }, [isConnected, account]);
-
-  useEffect(() => {
-    if (isConnected && account && nfts.length > 0) {
-      loadLikedNFTs();
-    }
-  }, [isConnected, account, nfts]);
-
-  const loadMyNFTs = async (): Promise<void> => {
+  const loadMyNFTs = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
       console.log("Loading my NFTs for account:", account);
@@ -84,7 +82,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
       console.log("My NFT Items:", myItems);
 
       const itemsWithMetadata = await Promise.all(
-        myItems.map(async (item: any) => {
+        myItems.map(async (item: BlockchainItem) => {
           const metadata = await blockchainService.getTokenMetadata(item.tokenId);
           return { ...item, metadata };
         })
@@ -92,7 +90,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
 
       console.log("My items with metadata:", itemsWithMetadata);
 
-      const transformedNFTs: NFT[] = itemsWithMetadata.map((item: any) => ({
+      const transformedNFTs: NFT[] = itemsWithMetadata.map((item) => ({
         id: item.tokenId,
         title: item.metadata?.name || `NFT #${item.tokenId}`,
         description: item.metadata?.description || "No description available",
@@ -116,9 +114,9 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [account]);
 
-  const loadLikedNFTs = async (): Promise<void> => {
+  const loadLikedNFTs = useCallback(async (): Promise<void> => {
     if (!account) return;
     
     try {
@@ -133,7 +131,22 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
     } catch (error) {
       console.error("Error loading liked NFTs:", error);
     }
-  };
+  }, [account, nfts]);
+
+  useEffect(() => {
+    if (isConnected && account) {
+      loadMyNFTs();
+    } else {
+      setNfts([]);
+      setLoading(false);
+    }
+  }, [isConnected, account, loadMyNFTs]);
+
+  useEffect(() => {
+    if (isConnected && account && nfts.length > 0) {
+      loadLikedNFTs();
+    }
+  }, [isConnected, account, nfts.length, loadLikedNFTs]);
 
   const toggleLikeNFT = async (nft: NFT): Promise<void> => {
     if (!isConnected) {
@@ -288,7 +301,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
         <div className="text-center text-white/70 py-12">
           {nfts.length === 0 ? (
             <>
-              <p className="text-lg mb-2">You don't own any NFTs yet</p>
+              <p className="text-lg mb-2">You don&apos;t own any NFTs yet</p>
               <p className="text-sm">Start by purchasing NFTs from the marketplace or creating your own!</p>
             </>
           ) : (
@@ -307,9 +320,11 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
             >
               <div className="p-0">
                 <div className="relative overflow-hidden rounded-xl">
-                  <img
+                  <Image
                     src={nft.image}
                     alt={nft.title}
+                    width={400}
+                    height={256}
                     className="w-full h-64 object-cover group-hover:scale-105 transition-all duration-300 ease-out"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;

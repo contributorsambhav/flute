@@ -1,12 +1,13 @@
 "use client";
-import { instrumentSerif } from "@/lib/fonts";
-import { useState, useEffect } from "react";
+
+import { Home, Plus, ShoppingCart, User, Wallet, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+
 import { Button } from "./ui/button";
-import { ShoppingCart, Wallet, Zap, Home, Plus, User } from "lucide-react";
-import WalletProfileDropdown from "./modals/WalletProfileDropdown";
 import ConnectWalletModal from "./modals/ConnectWallet";
-import Link from "next/link";
+import WalletProfileDropdown from "./modals/WalletProfileDropdown";
+import { instrumentSerif } from "@/lib/fonts";
 
 export default function Navbar({
   account,
@@ -44,7 +45,7 @@ export default function Navbar({
     try {
       if (walletType === "metamask") {
         if (typeof window !== "undefined" && window.ethereum) {
-          const accounts = await window.ethereum.request({
+          const accounts = await (window.ethereum as { request: (args: { method: string }) => Promise<string[]> }).request({
             method: "eth_requestAccounts",
           });
 
