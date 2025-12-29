@@ -65,6 +65,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [likedNFTs, setLikedNFTs] = useState<Set<number>>(new Set());
   const [likingNFT, setLikingNFT] = useState<number | null>(null);
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   const loadMyNFTs = useCallback(async (): Promise<void> => {
     try {
@@ -208,6 +209,10 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
     alert(`Viewing NFT #${tokenId} details (navigation would be implemented here)`);
   };
 
+  const handleImageError = (tokenId: number) => {
+    setImageErrors(prev => new Set(prev).add(tokenId));
+  };
+
   const filteredNFTs: NFT[] = nfts.filter((nft: NFT) => {
     const matchesSearch =
       nft.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -320,17 +325,34 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account }) => {
             >
               <div className="p-0">
                 <div className="relative overflow-hidden rounded-xl">
-                  <Image
-                    src={nft.image}
-                    alt={nft.title}
-                    width={400}
-                    height={256}
-                    className="w-full h-64 object-cover group-hover:scale-105 transition-all duration-300 ease-out"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = "/placeholder-nft.png";
-                    }}
-                  />
+                  {!imageErrors.has(nft.tokenId) ? (
+                    <Image
+                      src={nft.image}
+                      alt={nft.title}
+                      width={400}
+                      height={256}
+                      className="w-full h-64 object-cover group-hover:scale-105 transition-all duration-300 ease-out"
+                      unoptimized={nft.image.includes('ipfs') || nft.image.includes('pinata')}
+                      onError={() => handleImageError(nft.tokenId)}
+                    />
+                  ) : (
+                    <div className="w-full h-64 bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                      <div className="text-center p-4">
+                        <div className="text-white/50 text-4xl mb-2">🖼️</div>
+                        <div className="text-white/70 text-sm">Image unavailable</div>
+                        {nft.image.includes('ipfs') && (
+                          <a 
+                            href={nft.image}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 text-xs underline mt-2 inline-block"
+                          >
+                            View on IPFS
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
                     OWNED
                   </div>

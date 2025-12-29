@@ -63,6 +63,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account })
   const [likedNFTs, setLikedNFTs] = useState<Set<number>>(new Set());
   const [buyingNFT, setBuyingNFT] = useState<number | null>(null);
   const [likingNFT, setLikingNFT] = useState<number | null>(null);
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   const loadNFTs = useCallback(async (): Promise<void> => {
     try {
@@ -240,6 +241,10 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account })
     setSelectedCategory(value as Category);
   };
 
+  const handleImageError = (tokenId: number) => {
+    setImageErrors(prev => new Set(prev).add(tokenId));
+  };
+
   const filteredNFTs: NFT[] = nfts.filter((nft: NFT) => {
     const matchesSearch =
       nft.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -294,16 +299,33 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account })
               className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 hover:border-white/20 transition-all hover:transform hover:scale-105"
             >
               <div className="relative h-64 bg-white/5">
-                <Image
-                  src={nft.image}
-                  alt={nft.title}
-                  fill
-                  className="object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = '/placeholder-nft.png';
-                  }}
-                />
+                {!imageErrors.has(nft.tokenId) ? (
+                  <Image
+                    src={nft.image}
+                    alt={nft.title}
+                    fill
+                    className="object-cover"
+                    unoptimized={nft.image.includes('ipfs') || nft.image.includes('pinata')}
+                    onError={() => handleImageError(nft.tokenId)}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                    <div className="text-center p-4">
+                      <div className="text-white/50 text-4xl mb-2">🖼️</div>
+                      <div className="text-white/70 text-sm">Image unavailable</div>
+                      {nft.image.includes('ipfs') && (
+                        <a 
+                          href={nft.image}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 text-xs underline mt-2 inline-block"
+                        >
+                          View on IPFS
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-4 space-y-3">
