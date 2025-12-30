@@ -5,91 +5,68 @@ type GenerateImageRequestBody = {
   style?: string;
 };
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = (await request.json()) as GenerateImageRequestBody;
-    const { prompt, style } = body;
+const API_KEY = process.env.pollinations_server_secret_key!;
 
-    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+export async function POST(req: NextRequest) {
+  try {
+    console.log("Received image generation request");
+    const { prompt, style } = (await req.json()) as GenerateImageRequestBody;
+
+    if (!prompt?.trim()) {
       return NextResponse.json(
-        { error: "Prompt is required and must be a non-empty string" },
-        { status: 400 },
+        { error: "Prompt required" },
+        { status: 400 }
       );
     }
 
-    // Style enhancements
-    const stylePrompts: Record<string, string> = {
-      realistic:
-        "photorealistic, high detail, professional photography, 8k resolution",
-      abstract:
-        "abstract art, geometric shapes, vibrant colors, modern art style",
-      cyberpunk:
-        "cyberpunk aesthetic, neon lights, futuristic, dark atmosphere, synthwave style",
-      fantasy:
-        "fantasy art, magical elements, ethereal lighting, mystical atmosphere",
-      minimalist:
-        "minimalist design, clean lines, simple composition, elegant style",
+    const styleMap: Record<string, string> = {
+      realistic: "photorealistic, ultra detailed",
+      fantasy: "fantasy art, cinematic lighting",
+      cyberpunk: "cyberpunk, neon lights, futuristic",
+      abstract: "abstract, geometric, modern art",
+      minimalist: "minimalist, clean composition",
     };
 
-    const enhancedPrompt = `${prompt}, ${
-      stylePrompts[style ?? ""] ?? stylePrompts.realistic
-    }, high quality digital art`;
+    const finalPrompt = [
+      prompt,
+      styleMap[style ?? ""] ?? styleMap.realistic,
+      "high quality digital art",
+    ].join(", ");
 
-    // Pollinations.ai (free, no API key)
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
-      enhancedPrompt,
-    )}?width=512&height=512&seed=${Math.floor(Math.random() * 1_000_000)}`;
+    // Using turbo model with the new gen.pollinations.ai endpoint
+    const url = `https://gen.pollinations.ai/image/${encodeURIComponent(
+      finalPrompt
+    )}?width=512&height=512&seed=${Math.floor(Math.random() * 1e6)}&nologo=true&model=turbo`;
 
-    try {
-      // Fetch image to convert to base64
-      const imageResponse = await fetch(imageUrl);
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+      },
+    });
 
-      if (!imageResponse.ok) {
-        throw new Error("Failed to fetch generated image");
-      }
-
-      const imageBuffer = await imageResponse.arrayBuffer();
-      const base64Image = Buffer.from(imageBuffer).toString("base64");
-      const dataUrl = `data:image/png;base64,${base64Image}`;
-
-      return NextResponse.json({
-        imageUrl: dataUrl,
-        prompt: enhancedPrompt,
-        style: style ?? "realistic",
-        service: "Pollinations AI (Free)",
-      });
-    } catch (fetchError: unknown) {
-      if (fetchError instanceof Error) {
-        console.error("Image fetch failed:", fetchError.message);
-      } else {
-        console.error("Image fetch failed: Unknown error");
-      }
-
-      // Fallback to direct URL
-      return NextResponse.json({
-        imageUrl,
-        prompt: enhancedPrompt,
-        style: style ?? "realistic",
-        service: "Pollinations AI (Free)",
-        note: "Direct URL returned – image loads directly in browser",
-      });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("Pollinations error:", text);
+      return NextResponse.json(
+        { error: "Generation failed", details: text },
+        { status: res.status }
+      );
     }
-  } catch (error: unknown) {
-    console.error(
-      "Error generating image:",
-      error instanceof Error ? error.message : error,
-    );
 
+    const buffer = await res.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+
+    return NextResponse.json({
+      imageUrl: `data:image/png;base64,${base64}`,
+      prompt: finalPrompt,
+      model: "turbo",
+      service: "Pollinations (Authenticated)",
+    });
+  } catch (e) {
+    console.error(e);
     return NextResponse.json(
-      { error: "Failed to generate image. Please try again." },
-      { status: 500 },
+      { error: "Server error" },
+      { status: 500 }
     );
   }
-}
-
-export async function GET() {
-  return NextResponse.json(
-    { error: "Method not allowed. Use POST to generate images." },
-    { status: 405 },
-  );
 }

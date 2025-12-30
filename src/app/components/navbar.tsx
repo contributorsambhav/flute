@@ -87,8 +87,10 @@ export default function Navbar({
       window.ethereum.on("chainChanged", handleChainChanged);
 
       return () => {
-        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-        window.ethereum.removeListener("chainChanged", handleChainChanged);
+        if (window.ethereum) {
+          window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+          window.ethereum.removeListener("chainChanged", handleChainChanged);
+        }
       };
     }
   }, [account]);
@@ -110,6 +112,11 @@ export default function Navbar({
   };
 
   const checkConnection = async (address: string) => {
+    if (!window.ethereum) {
+      setNetworkError("MetaMask not found");
+      return;
+    }
+
     try {
       const chainId = await window.ethereum.request({ method: "eth_chainId" });
       const chainIdNumber = parseInt(chainId, 16);
@@ -151,6 +158,10 @@ export default function Navbar({
   };
 
   const switchToSepolia = async (): Promise<boolean> => {
+    if (!window.ethereum) {
+      throw new Error("MetaMask not found");
+    }
+
     try {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
