@@ -33,10 +33,9 @@ export async function POST(req: NextRequest) {
       "high quality digital art",
     ].join(", ");
 
-    // Using turbo model with the new gen.pollinations.ai endpoint
     const url = `https://gen.pollinations.ai/image/${encodeURIComponent(
       finalPrompt
-    )}?width=512&height=512&seed=${Math.floor(Math.random() * 1e6)}&nologo=true&model=turbo`;
+    )}?width=512&height=512&seed=${Math.floor(Math.random() * 1e6)}&nologo=true&model=gptimage`;
 
     const res = await fetch(url, {
       headers: {
@@ -59,7 +58,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       imageUrl: `data:image/png;base64,${base64}`,
       prompt: finalPrompt,
-      model: "turbo",
+      model: "gptimage",
       service: "Pollinations (Authenticated)",
     });
   } catch (e) {

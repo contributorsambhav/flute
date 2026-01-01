@@ -1,17 +1,8 @@
 import { BrowserProvider, Contract, JsonRpcSigner, Log, TransactionReceipt, TransactionResponse, ethers } from "ethers";
-
-export const CONTRACT_ADDRESS = '0xeE7277e67a845c179BB32E02316Af1202EA0bA06';
-
-export const SUPPORTED_NETWORKS = {
-  sepolia: {
-    chainId: '0xaa36a7',
-    chainIdNumber: 11155111,
-    name: 'Sepolia Testnet',
-    rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/rxUcWxJuV1W4pIY79qeptqyeAf8KaKUk'
-  }
-};
+import { DEFAULT_NETWORK, getNetworkConfig, isNetworkSupported, type NetworkConfig } from './networks';
 
 export const CONTRACT_ABI = [
+  // View functions
   "function getListingPrice() view returns (uint256)",
   "function fetchMarketItems() view returns (tuple(uint256 tokenId, address seller, address owner, uint256 price, bool sold, string category, uint256 likes)[])",
   "function fetchMyNFTs() view returns (tuple(uint256 tokenId, address seller, address owner, uint256 price, bool sold, string category, uint256 likes)[])",
@@ -21,22 +12,27 @@ export const CONTRACT_ABI = [
   "function tokenURI(uint256 tokenId) view returns (string)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function tokenLikes(uint256 tokenId, address user) view returns (bool)",
-
-  // --- Minting and Marketplace Actions ---
-  "function createToken(string tokenURI, uint256 price, string category) payable returns (uint256)",
-  "function listNFT(uint256 tokenId, uint256 price, string category)",
-  "function delistNFT(uint256 tokenId)",
-  "function createMarketSale(uint256 tokenId) payable",
-
-  // --- Likes ---
+  "function getContractBalance() view returns (uint256)",
+  "function getTotalFeesCollected() view returns (uint256)",
+  
+  // Minting and Marketplace Actions
+  "function mintNFT(string tokenURI, string category) returns (uint256)",
+  "function listNFTForSale(uint256 tokenId, uint256 price) payable",
+  "function buyNFT(uint256 tokenId) payable",
+  "function cancelListing(uint256 tokenId)",
+  
+  // Likes
   "function likeNFT(uint256 tokenId)",
   "function unlikeNFT(uint256 tokenId)",
-
-  // --- Admin ---
-  "function updateListingPrice(uint256 _listingPrice) payable",
-
-  // --- Events ---
-  "event MarketItemCreated(uint256 indexed tokenId, address seller, address owner, uint256 price, bool sold, string category)",
+  
+  // Admin
+  "function updateListingPrice(uint256 _listingPrice)",
+  "function withdrawFees()",
+  "function withdrawAmount(uint256 amount)",
+  
+  // Events
+  "event NFTMinted(uint256 indexed tokenId, address owner, string tokenURI, string category)",
+  "event MarketItemListed(uint256 indexed tokenId, address seller, uint256 price, string category)",
   "event MarketItemSold(uint256 indexed tokenId, address seller, address buyer, uint256 price)",
   "event NFTLiked(uint256 indexed tokenId, address liker)",
   "event NFTUnliked(uint256 indexed tokenId, address unliker)"
@@ -86,18 +82,7 @@ interface ContractMarketItem {
   likes: bigint;
 }
 
-// Extended Ethereum provider interface
-interface ExtendedEthereumProvider {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-  on?(event: string, callback: (...args: unknown[]) => void): void;
-  removeListener?(event: string, callback: (...args: unknown[]) => void): void;
-}
 
-declare global {
-  interface Window {
-    ethereum?: ExtendedEthereumProvider;
-  }
-}
 
 class BlockchainService {
   private provider: BrowserProvider | null = null;
@@ -105,6 +90,7 @@ class BlockchainService {
   private contract: Contract | null = null;
   private readOnlyContract: Contract | null = null;
   private isInitializing: boolean = false;
+  private currentNetwork: NetworkConfig = DEFAULT_NETWORK;
 
   constructor() {
     this.initializeReadOnlyProvider();
@@ -113,10 +99,16 @@ class BlockchainService {
 
   private async initializeReadOnlyProvider(): Promise<void> {
     try {
-      const readOnlyProvider = new ethers.JsonRpcProvider(SUPPORTED_NETWORKS.sepolia.rpcUrl);
+      const readOnlyProvider = new ethers.JsonRpcProvider(this.currentNetwork.rpcUrl);
       await readOnlyProvider.getNetwork();
-      this.readOnlyContract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readOnlyProvider);
-      const code = await readOnlyProvider.getCode(CONTRACT_ADDRESS);
+      
+      this.readOnlyContract = new Contract(
+        this.currentNetwork.contractAddress,
+        CONTRACT_ABI,
+        readOnlyProvider
+      );
+      
+      const code = await readOnlyProvider.getCode(this.currentNetwork.contractAddress);
       if (code === '0x') {
         throw new Error('Contract not found at the specified address');
       }
@@ -134,130 +126,30 @@ class BlockchainService {
       }
       await this.initializeProvider();
     }
-    
+
     const network = await this.provider!.getNetwork();
-    if (Number(network.chainId) !== SUPPORTED_NETWORKS.sepolia.chainIdNumber) {
-      throw new Error('Please switch to Sepolia testnet');
-    }
-  }
-
-  public async buyNFT(tokenId: number, price: string): Promise<PurchaseResult> {
-    await this.ensureConnection();
-    
-    try {
-      const priceInWei = ethers.parseEther(price);
-      
-      let gasEstimate: bigint;
-      try {
-        gasEstimate = await this.contract!.createMarketSale.estimateGas(tokenId, { value: priceInWei });
-      } catch (gasError) {
-        const error = gasError as EthereumError;
-        console.error('Gas estimation failed:', error);
-        throw new Error(`Transaction will fail: ${error.reason || error.message}`);
-      }
-
-      const balance = await this.provider!.getBalance(await this.signer!.getAddress());
-      const requiredAmount = priceInWei + (gasEstimate * BigInt(2000000000));
-      
-      if (balance < requiredAmount) {
-        throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(requiredAmount)} ETH`);
-      }
-
-      const transaction: TransactionResponse = await this.contract!.createMarketSale(tokenId, {
-        value: priceInWei,
-        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
-      });
-
-      const receipt = await transaction.wait();
-      return { transactionHash: receipt!.hash };
-    } catch (error) {
-      const err = error as EthereumError;
-      console.error('Error buying NFT:', err);
-      if (err.code === 'INSUFFICIENT_FUNDS') {
-        throw new Error('Insufficient funds');
-      } else if (err.code === 'USER_REJECTED' || err.code === 4001) {
-        throw new Error('Transaction rejected');
-      } else if (err.message?.includes('already sold')) {
-        throw new Error('NFT already sold');
-      } else {
-        throw new Error(`Purchase failed: ${err.message || err}`);
-      }
-    }
-  }
-
-  public async likeNFT(tokenId: number): Promise<string> {
-    await this.ensureConnection();
-    
-    try {
-      let gasEstimate: bigint;
-      try {
-        gasEstimate = await this.contract!.likeNFT.estimateGas(tokenId);
-      } catch (gasError) {
-        const error = gasError as EthereumError;
-        if (error.reason?.includes('Already liked')) {
-          throw new Error('You have already liked this NFT');
-        }
-        throw new Error(`Like will fail: ${error.reason || error.message}`);
-      }
-
-      const transaction: TransactionResponse = await this.contract!.likeNFT(tokenId, {
-        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
-      });
-      
-      const receipt = await transaction.wait();
-      return receipt!.hash;
-    } catch (error) {
-      const err = error as EthereumError;
-      console.error('Error liking NFT:', err);
-      if (err.code === 'USER_REJECTED' || err.code === 4001) {
-        throw new Error('Transaction rejected');
-      } else {
-        throw new Error(`Like failed: ${err.message || err}`);
-      }
-    }
-  }
-
-  public async unlikeNFT(tokenId: number): Promise<string> {
-    await this.ensureConnection();
-    
-    try {
-      let gasEstimate: bigint;
-      try {
-        gasEstimate = await this.contract!.unlikeNFT.estimateGas(tokenId);
-      } catch (gasError) {
-        const error = gasError as EthereumError;
-        if (error.reason?.includes('Not liked')) {
-          throw new Error('You have not liked this NFT yet');
-        }
-        throw new Error(`Unlike will fail: ${error.reason || error.message}`);
-      }
-
-      const transaction: TransactionResponse = await this.contract!.unlikeNFT(tokenId, {
-        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
-      });
-      
-      const receipt = await transaction.wait();
-      return receipt!.hash;
-    } catch (error) {
-      const err = error as EthereumError;
-      console.error('Error unliking NFT:', err);
-      if (err.code === 'USER_REJECTED' || err.code === 4001) {
-        throw new Error('Transaction rejected');
-      } else {
-        throw new Error(`Unlike failed: ${err.message || err}`);
-      }
+    if (!isNetworkSupported(Number(network.chainId))) {
+      throw new Error(`Unsupported network. Please switch to ${this.currentNetwork.name}`);
     }
   }
 
   private setupNetworkChangeListener(): void {
     if (typeof window !== 'undefined' && window.ethereum) {
-      // Type-safe event handlers
       const handleChainChanged = (chainId: unknown) => {
         console.log('Network changed to:', chainId);
+        const chainIdNum = typeof chainId === 'string' ? parseInt(chainId, 16) : Number(chainId);
+        
+        if (isNetworkSupported(chainIdNum)) {
+          const networkConfig = getNetworkConfig(chainIdNum);
+          if (networkConfig) {
+            this.currentNetwork = networkConfig;
+          }
+        }
+        
         this.provider = null;
         this.signer = null;
         this.contract = null;
-        console.log('Please refresh the page or reconnect your wallet');
+        this.initializeReadOnlyProvider();
       };
 
       const handleAccountsChanged = (accounts: unknown) => {
@@ -271,7 +163,6 @@ class BlockchainService {
         }
       };
 
-      // Check if on method exists before calling
       if (window.ethereum.on) {
         window.ethereum.on('chainChanged', handleChainChanged);
         window.ethereum.on('accountsChanged', handleAccountsChanged);
@@ -283,21 +174,23 @@ class BlockchainService {
     if (typeof window === 'undefined' || !window.ethereum) {
       throw new Error('MetaMask not installed');
     }
+
     try {
       const chainId = await window.ethereum.request({ method: 'eth_chainId' }) as string;
-      console.log('Current network:', chainId, 'Expected:', SUPPORTED_NETWORKS.sepolia.chainId);
-      if (chainId !== SUPPORTED_NETWORKS.sepolia.chainId) {
-        console.log('Switching to Sepolia network...');
+      const chainIdNum = parseInt(chainId, 16);
+      
+      if (!isNetworkSupported(chainIdNum)) {
+        const hexChainId = `0x${this.currentNetwork.chainId.toString(16)}`;
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: SUPPORTED_NETWORKS.sepolia.chainId }],
+          params: [{ chainId: hexChainId }],
         });
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } catch (error) {
       const err = error as EthereumError;
       if (err.code === 4902) {
-        throw new Error('Sepolia network not added to MetaMask. Please add it manually.');
+        throw new Error(`${this.currentNetwork.name} not added to MetaMask. Please add it manually.`);
       } else if (err.code === 4001) {
         throw new Error('User rejected network switch');
       } else {
@@ -310,6 +203,7 @@ class BlockchainService {
     if (typeof window === "undefined" || !window.ethereum) {
       return false;
     }
+
     try {
       const accounts = await window.ethereum.request({
         method: "eth_accounts",
@@ -325,18 +219,20 @@ class BlockchainService {
     if (typeof window === 'undefined' || !window.ethereum) {
       throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
     }
+
     if (this.isInitializing) {
       throw new Error('Connection already in progress. Please wait.');
     }
+
     try {
       this.isInitializing = true;
-      console.log('Connecting wallet...');
       await this.ensureCorrectNetwork();
+
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       }) as string[];
+
       if (accounts && accounts.length > 0) {
-        console.log('Wallet connected:', accounts[0]);
         await this.initializeProvider();
         await this.verifyContractConnection();
         return accounts[0];
@@ -348,7 +244,7 @@ class BlockchainService {
       if (err.code === 4001) {
         throw new Error('Connection rejected by user');
       } else if (err.message?.includes('network')) {
-        throw new Error('Network connection failed. Please ensure you\'re on Sepolia testnet.');
+        throw new Error(`Network connection failed. Please ensure you're on ${this.currentNetwork.name}.`);
       } else {
         throw new Error(`Wallet connection failed: ${err.message || err}`);
       }
@@ -361,18 +257,27 @@ class BlockchainService {
     if (typeof window === "undefined" || !window.ethereum) {
       throw new Error("MetaMask is not installed");
     }
+
     try {
-      console.log('Initializing provider...');
-      // Type assertion to satisfy ethers BrowserProvider
       this.provider = new BrowserProvider(window.ethereum as unknown as ethers.Eip1193Provider);
       const network = await this.provider.getNetwork();
-      console.log('Connected to network:', network.name, network.chainId);
-      if (Number(network.chainId) !== SUPPORTED_NETWORKS.sepolia.chainIdNumber) {
-        throw new Error(`Wrong network. Please switch to Sepolia testnet. Current: ${network.chainId}`);
+      const chainId = Number(network.chainId);
+
+      if (!isNetworkSupported(chainId)) {
+        throw new Error(`Wrong network. Please switch to ${this.currentNetwork.name}.`);
       }
+
+      const networkConfig = getNetworkConfig(chainId);
+      if (networkConfig) {
+        this.currentNetwork = networkConfig;
+      }
+
       this.signer = await this.provider.getSigner();
-      this.contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, this.signer);
-      console.log('Provider initialized successfully');
+      this.contract = new Contract(
+        this.currentNetwork.contractAddress,
+        CONTRACT_ABI,
+        this.signer
+      );
     } catch (error) {
       console.error('Error initializing provider:', error);
       this.provider = null;
@@ -384,17 +289,17 @@ class BlockchainService {
 
   private async verifyContractConnection(): Promise<void> {
     try {
-      console.log('Verifying contract connection...');
       const contract = this.contract || this.readOnlyContract;
       if (!contract) {
         throw new Error('No contract instance available');
       }
+
       const totalTokens = await contract.getTotalTokens();
       console.log('Contract verification successful. Total tokens:', totalTokens.toString());
     } catch (error) {
       const err = error as Error;
       console.error('Contract verification failed:', err);
-      throw new Error(`Cannot connect to contract: ${err.message}. Please check if the contract is deployed on Sepolia.`);
+      throw new Error(`Cannot connect to contract: ${err.message}. Please check if the contract is deployed.`);
     }
   }
 
@@ -407,6 +312,7 @@ class BlockchainService {
         return null;
       }
     }
+
     try {
       return await this.signer!.getAddress();
     } catch (error) {
@@ -420,14 +326,13 @@ class BlockchainService {
       const contract = this.contract || this.readOnlyContract;
       if (!contract) {
         await this.initializeReadOnlyProvider();
-        if (!this.readOnlyContract) {
-          throw new Error('Contract not initialized');
-        }
       }
+
       const finalContract = this.contract || this.readOnlyContract;
       if (!finalContract) {
         throw new Error('Contract not initialized');
       }
+
       const price = await finalContract.getListingPrice();
       return ethers.formatEther(price);
     } catch (error) {
@@ -437,73 +342,41 @@ class BlockchainService {
     }
   }
 
+  /**
+   * Mint NFT - FREE, goes directly to creator's wallet
+   */
   public async mintNFT(
-    title: string,
-    description: string,
     metadataUrl: string,
-    price: string,
     category: string,
   ): Promise<MintResult> {
-    if (!this.contract || !this.signer) {
-      throw new Error('Wallet not connected. Please connect your wallet first.');
-    }
+    await this.ensureConnection();
+
     try {
-      console.log('Starting NFT mint process...');
-      console.log('Mint parameters:', {
-        title,
-        description,
-        metadataUrl,
-        price,
-        category,
-      });
-      const network = await this.provider!.getNetwork();
-      if (Number(network.chainId) !== SUPPORTED_NETWORKS.sepolia.chainIdNumber) {
-        throw new Error('Network changed. Please ensure you\'re on Sepolia testnet.');
-      }
-      const listingPriceEth = await this.getListingPrice();
-      const listingPrice = ethers.parseEther(listingPriceEth);
-      const priceInWei = ethers.parseEther(price);
-      console.log("Transaction parameters:", {
-        tokenURI: metadataUrl,
-        priceInWei: priceInWei.toString(),
-        category,
-        listingPrice: listingPrice.toString(),
-      });
-      console.log('Estimating gas...');
+      console.log('Minting NFT (free)...', { metadataUrl, category });
+
       let gasEstimate: bigint;
       try {
-        gasEstimate = await this.contract.createToken.estimateGas(
-          metadataUrl,
-          priceInWei,
-          category,
-          { value: listingPrice },
-        );
-        console.log('Estimated gas:', gasEstimate.toString());
+        gasEstimate = await this.contract!.mintNFT.estimateGas(metadataUrl, category);
       } catch (gasError) {
         const error = gasError as EthereumError;
         console.error('Gas estimation failed:', error);
-        throw new Error(`Gas estimation failed: ${error.reason || error.message || error}`);
+        throw new Error(`Gas estimation failed: ${error.reason || error.message}`);
       }
-      const balance = await this.provider!.getBalance(await this.signer.getAddress());
-      const requiredAmount = listingPrice + (gasEstimate * BigInt(2000000000)); 
-      if (balance < requiredAmount) {
-        throw new Error(`Insufficient ETH balance. Required: ~${ethers.formatEther(requiredAmount)} ETH`);
-      }
-      console.log('Sending transaction...');
-      const transaction: TransactionResponse = await this.contract.createToken(
+
+      const transaction: TransactionResponse = await this.contract!.mintNFT(
         metadataUrl,
-        priceInWei,
         category,
         {
-          value: listingPrice,
-          gasLimit: (gasEstimate * BigInt(120)) / BigInt(100), 
-        },
+          gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+        }
       );
+
       console.log('Transaction sent:', transaction.hash);
-      console.log('Waiting for confirmation...');
       const receipt = await transaction.wait();
       console.log("Transaction confirmed:", receipt);
+
       const tokenId = await this.extractTokenIdFromReceipt(receipt!);
+
       return {
         tokenId: tokenId,
         transactionHash: receipt!.hash,
@@ -511,18 +384,224 @@ class BlockchainService {
     } catch (error) {
       const err = error as EthereumError;
       console.error('Error minting NFT:', err);
+      
       if (err.code === 'INSUFFICIENT_FUNDS') {
-        throw new Error('Insufficient funds to pay for transaction and gas fees');
+        throw new Error('Insufficient funds for gas fees');
       } else if (err.code === 'USER_REJECTED' || err.code === 4001) {
         throw new Error('Transaction was rejected by user');
-      } else if (err.message?.includes('execution reverted')) {
-        throw new Error('Transaction failed: Contract execution reverted. Please check your parameters.');
-      } else if (err.message?.includes('nonce')) {
-        throw new Error('Transaction failed: Nonce error. Please try again.');
-      } else if (err.message?.includes('network')) {
-        throw new Error('Network error: Please ensure you\'re connected to Sepolia testnet.');
       } else {
         throw new Error(`Minting failed: ${err.message || err}`);
+      }
+    }
+  }
+
+  /**
+   * List NFT for sale - Requires listing fee payment
+   */
+  public async listNFTForSale(
+    tokenId: number,
+    price: string
+  ): Promise<string> {
+    await this.ensureConnection();
+
+    try {
+      const listingPriceEth = await this.getListingPrice();
+      const listingPrice = ethers.parseEther(listingPriceEth);
+      const priceInWei = ethers.parseEther(price);
+
+      console.log('Listing NFT for sale...', {
+        tokenId,
+        price: priceInWei.toString(),
+        listingFee: listingPrice.toString()
+      });
+
+      let gasEstimate: bigint;
+      try {
+        gasEstimate = await this.contract!.listNFTForSale.estimateGas(
+          tokenId,
+          priceInWei,
+          { value: listingPrice }
+        );
+      } catch (gasError) {
+        const error = gasError as EthereumError;
+        console.error('Gas estimation failed:', error);
+        throw new Error(`Listing will fail: ${error.reason || error.message}`);
+      }
+
+      const balance = await this.provider!.getBalance(await this.signer!.getAddress());
+      const requiredAmount = listingPrice + (gasEstimate * BigInt(2000000000));
+      
+      if (balance < requiredAmount) {
+        throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(requiredAmount)} ETH`);
+      }
+
+      const transaction: TransactionResponse = await this.contract!.listNFTForSale(
+        tokenId,
+        priceInWei,
+        {
+          value: listingPrice,
+          gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+        }
+      );
+
+      const receipt = await transaction.wait();
+      return receipt!.hash;
+    } catch (error) {
+      const err = error as EthereumError;
+      console.error('Error listing NFT:', err);
+      
+      if (err.code === 'INSUFFICIENT_FUNDS') {
+        throw new Error('Insufficient funds for listing fee and gas');
+      } else if (err.code === 'USER_REJECTED' || err.code === 4001) {
+        throw new Error('Transaction rejected');
+      } else {
+        throw new Error(`Listing failed: ${err.message || err}`);
+      }
+    }
+  }
+
+  /**
+   * Cancel listing and return NFT to wallet
+   */
+  public async cancelListing(tokenId: number): Promise<string> {
+    await this.ensureConnection();
+
+    try {
+      let gasEstimate: bigint;
+      try {
+        gasEstimate = await this.contract!.cancelListing.estimateGas(tokenId);
+      } catch (gasError) {
+        const error = gasError as EthereumError;
+        throw new Error(`Cancel will fail: ${error.reason || error.message}`);
+      }
+
+      const transaction: TransactionResponse = await this.contract!.cancelListing(tokenId, {
+        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+      });
+
+      const receipt = await transaction.wait();
+      return receipt!.hash;
+    } catch (error) {
+      const err = error as EthereumError;
+      console.error('Error canceling listing:', err);
+      
+      if (err.code === 'USER_REJECTED' || err.code === 4001) {
+        throw new Error('Transaction rejected');
+      } else {
+        throw new Error(`Cancel failed: ${err.message || err}`);
+      }
+    }
+  }
+
+  public async buyNFT(tokenId: number, price: string): Promise<PurchaseResult> {
+    await this.ensureConnection();
+
+    try {
+      const priceInWei = ethers.parseEther(price);
+
+      let gasEstimate: bigint;
+      try {
+        gasEstimate = await this.contract!.buyNFT.estimateGas(tokenId, {
+          value: priceInWei
+        });
+      } catch (gasError) {
+        const error = gasError as EthereumError;
+        console.error('Gas estimation failed:', error);
+        throw new Error(`Transaction will fail: ${error.reason || error.message}`);
+      }
+
+      const balance = await this.provider!.getBalance(await this.signer!.getAddress());
+      const requiredAmount = priceInWei + (gasEstimate * BigInt(2000000000));
+
+      if (balance < requiredAmount) {
+        throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(requiredAmount)} ETH`);
+      }
+
+      const transaction: TransactionResponse = await this.contract!.buyNFT(tokenId, {
+        value: priceInWei,
+        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+      });
+
+      const receipt = await transaction.wait();
+      return { transactionHash: receipt!.hash };
+    } catch (error) {
+      const err = error as EthereumError;
+      console.error('Error buying NFT:', err);
+
+      if (err.code === 'INSUFFICIENT_FUNDS') {
+        throw new Error('Insufficient funds');
+      } else if (err.code === 'USER_REJECTED' || err.code === 4001) {
+        throw new Error('Transaction rejected');
+      } else if (err.message?.includes('already sold')) {
+        throw new Error('NFT already sold');
+      } else {
+        throw new Error(`Purchase failed: ${err.message || err}`);
+      }
+    }
+  }
+
+  public async likeNFT(tokenId: number): Promise<string> {
+    await this.ensureConnection();
+
+    try {
+      let gasEstimate: bigint;
+      try {
+        gasEstimate = await this.contract!.likeNFT.estimateGas(tokenId);
+      } catch (gasError) {
+        const error = gasError as EthereumError;
+        if (error.reason?.includes('Already liked')) {
+          throw new Error('You have already liked this NFT');
+        }
+        throw new Error(`Like will fail: ${error.reason || error.message}`);
+      }
+
+      const transaction: TransactionResponse = await this.contract!.likeNFT(tokenId, {
+        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+      });
+
+      const receipt = await transaction.wait();
+      return receipt!.hash;
+    } catch (error) {
+      const err = error as EthereumError;
+      console.error('Error liking NFT:', err);
+
+      if (err.code === 'USER_REJECTED' || err.code === 4001) {
+        throw new Error('Transaction rejected');
+      } else {
+        throw new Error(`Like failed: ${err.message || err}`);
+      }
+    }
+  }
+
+  public async unlikeNFT(tokenId: number): Promise<string> {
+    await this.ensureConnection();
+
+    try {
+      let gasEstimate: bigint;
+      try {
+        gasEstimate = await this.contract!.unlikeNFT.estimateGas(tokenId);
+      } catch (gasError) {
+        const error = gasError as EthereumError;
+        if (error.reason?.includes('Not liked')) {
+          throw new Error('You have not liked this NFT yet');
+        }
+        throw new Error(`Unlike will fail: ${error.reason || error.message}`);
+      }
+
+      const transaction: TransactionResponse = await this.contract!.unlikeNFT(tokenId, {
+        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+      });
+
+      const receipt = await transaction.wait();
+      return receipt!.hash;
+    } catch (error) {
+      const err = error as EthereumError;
+      console.error('Error unliking NFT:', err);
+
+      if (err.code === 'USER_REJECTED' || err.code === 4001) {
+        throw new Error('Transaction rejected');
+      } else {
+        throw new Error(`Unlike failed: ${err.message || err}`);
       }
     }
   }
@@ -532,24 +611,24 @@ class BlockchainService {
       const event = receipt.logs.find((log: Log) => {
         try {
           const parsedLog = this.contract!.interface.parseLog(log);
-          return parsedLog?.name === "MarketItemCreated";
+          return parsedLog?.name === "NFTMinted";
         } catch {
           return false;
         }
       });
+
       if (event) {
         const parsedLog = this.contract!.interface.parseLog(event);
         return Number(parsedLog!.args.tokenId);
       }
+
       try {
         const totalTokens = await this.contract!.getTotalTokens();
         return Number(totalTokens);
       } catch (fallbackError) {
-        console.warn(
-          "Could not get total tokens for token ID fallback:",
-          fallbackError,
-        );
+        console.warn("Could not get total tokens for token ID fallback:", fallbackError);
       }
+
       return 0;
     } catch (error) {
       console.error("Error extracting token ID:", error);
@@ -557,19 +636,18 @@ class BlockchainService {
     }
   }
 
-  public async hasLikedNFT(
-    tokenId: number,
-    userAddress: string,
-  ): Promise<boolean> {
+  public async hasLikedNFT(tokenId: number, userAddress: string): Promise<boolean> {
     try {
       const contract = this.contract || this.readOnlyContract;
       if (!contract) {
         await this.initializeReadOnlyProvider();
       }
+
       const finalContract = this.contract || this.readOnlyContract;
       if (!finalContract) {
         throw new Error('Contract not initialized');
       }
+
       return await finalContract.tokenLikes(tokenId, userAddress);
     } catch (error) {
       console.error("Error checking like status:", error);
@@ -583,10 +661,12 @@ class BlockchainService {
       if (!contract) {
         await this.initializeReadOnlyProvider();
       }
+
       const finalContract = this.contract || this.readOnlyContract;
       if (!finalContract) {
         throw new Error('Contract not initialized');
       }
+
       const items: ContractMarketItem[] = await finalContract.fetchMarketItems();
       return items.map((item: ContractMarketItem) => ({
         tokenId: Number(item.tokenId),
@@ -607,6 +687,7 @@ class BlockchainService {
     if (!this.contract) {
       throw new Error('Wallet not connected. Please connect your wallet first.');
     }
+
     try {
       const items: ContractMarketItem[] = await this.contract.fetchMyNFTs();
       return items.map((item: ContractMarketItem) => ({
@@ -628,6 +709,7 @@ class BlockchainService {
     if (!this.contract) {
       throw new Error('Wallet not connected. Please connect your wallet first.');
     }
+
     try {
       const items: ContractMarketItem[] = await this.contract.fetchItemsListed();
       return items.map((item: ContractMarketItem) => ({
@@ -651,15 +733,19 @@ class BlockchainService {
       if (!contract) {
         await this.initializeReadOnlyProvider();
       }
+
       const finalContract = this.contract || this.readOnlyContract;
       if (!finalContract) {
         throw new Error('Contract not initialized');
       }
+
       const tokenURI = await finalContract.tokenURI(tokenId);
       const response = await fetch(tokenURI);
+      
       if (!response.ok) {
         throw new Error("Failed to fetch metadata");
       }
+      
       return await response.json() as NFTMetadata;
     } catch (error) {
       console.error("Error getting token metadata:", error);
@@ -673,10 +759,12 @@ class BlockchainService {
       if (!contract) {
         await this.initializeReadOnlyProvider();
       }
+
       const finalContract = this.contract || this.readOnlyContract;
       if (!finalContract) {
         throw new Error('Contract not initialized');
       }
+
       const item: ContractMarketItem = await finalContract.getMarketItem(tokenId);
       return {
         tokenId: Number(item.tokenId),
@@ -694,49 +782,45 @@ class BlockchainService {
   }
 
   public setupEventListeners(callbacks: {
-    onMarketItemCreated?: (
-      tokenId: number,
-      seller: string,
-      price: string,
-    ) => void;
-    onMarketItemSold?: (
-      tokenId: number,
-      seller: string,
-      buyer: string,
-      price: string,
-    ) => void;
+    onNFTMinted?: (tokenId: number, owner: string, tokenURI: string, category: string) => void;
+    onMarketItemListed?: (tokenId: number, seller: string, price: string, category: string) => void;
+    onMarketItemSold?: (tokenId: number, seller: string, buyer: string, price: string) => void;
     onNFTLiked?: (tokenId: number, liker: string) => void;
+    onNFTUnliked?: (tokenId: number, unliker: string) => void;
   }): void {
     const contract = this.contract || this.readOnlyContract;
     if (!contract) {
       console.warn("Contract not initialized for event listeners");
       return;
     }
-    if (callbacks.onMarketItemCreated) {
-      contract.on(
-        "MarketItemCreated",
-        (tokenId: bigint, seller: string, price: bigint) => {
-          callbacks.onMarketItemCreated!(
-            Number(tokenId),
-            seller,
-            ethers.formatEther(price),
-          );
-        },
-      );
-    }
-    if (callbacks.onMarketItemSold) {
-      contract.on("MarketItemSold", (tokenId: bigint, seller: string, buyer: string, price: bigint) => {
-        callbacks.onMarketItemSold!(
-          Number(tokenId),
-          seller,
-          buyer,
-          ethers.formatEther(price),
-        );
+
+    if (callbacks.onNFTMinted) {
+      contract.on("NFTMinted", (tokenId: bigint, owner: string, tokenURI: string, category: string) => {
+        callbacks.onNFTMinted!(Number(tokenId), owner, tokenURI, category);
       });
     }
+
+    if (callbacks.onMarketItemListed) {
+      contract.on("MarketItemListed", (tokenId: bigint, seller: string, price: bigint, category: string) => {
+        callbacks.onMarketItemListed!(Number(tokenId), seller, ethers.formatEther(price), category);
+      });
+    }
+
+    if (callbacks.onMarketItemSold) {
+      contract.on("MarketItemSold", (tokenId: bigint, seller: string, buyer: string, price: bigint) => {
+        callbacks.onMarketItemSold!(Number(tokenId), seller, buyer, ethers.formatEther(price));
+      });
+    }
+
     if (callbacks.onNFTLiked) {
       contract.on("NFTLiked", (tokenId: bigint, liker: string) => {
         callbacks.onNFTLiked!(Number(tokenId), liker);
+      });
+    }
+
+    if (callbacks.onNFTUnliked) {
+      contract.on("NFTUnliked", (tokenId: bigint, unliker: string) => {
+        callbacks.onNFTUnliked!(Number(tokenId), unliker);
       });
     }
   }
@@ -752,10 +836,7 @@ class BlockchainService {
     try {
       if (this.provider) {
         const network = await this.provider.getNetwork();
-        return {
-          chainId: Number(network.chainId),
-          name: network.name
-        };
+        return { chainId: Number(network.chainId), name: network.name };
       }
       return null;
     } catch (error) {
@@ -763,10 +844,157 @@ class BlockchainService {
       return null;
     }
   }
+
+  public getNetworkConfig(): NetworkConfig {
+    return this.currentNetwork;
+  }
+
+  public async getContractBalance(): Promise<string> {
+    try {
+      const contract = this.contract || this.readOnlyContract;
+      if (!contract) {
+        await this.initializeReadOnlyProvider();
+      }
+
+      const finalContract = this.contract || this.readOnlyContract;
+      if (!finalContract) {
+        throw new Error('Contract not initialized');
+      }
+
+      const balance = await finalContract.getContractBalance();
+      return ethers.formatEther(balance);
+    } catch (error) {
+      console.error("Error getting contract balance:", error);
+      return "0";
+    }
+  }
+
+  public async getTotalFeesCollected(): Promise<string> {
+    try {
+      const contract = this.contract || this.readOnlyContract;
+      if (!contract) {
+        await this.initializeReadOnlyProvider();
+      }
+
+      const finalContract = this.contract || this.readOnlyContract;
+      if (!finalContract) {
+        throw new Error('Contract not initialized');
+      }
+
+      const fees = await finalContract.getTotalFeesCollected();
+      return ethers.formatEther(fees);
+    } catch (error) {
+      console.error("Error getting total fees:", error);
+      return "0";
+    }
+  }
+
+  // Add these methods to the BlockchainService class
+
+public async withdrawFees(): Promise<string> {
+  await this.ensureConnection();
+
+  try {
+    let gasEstimate: bigint;
+    try {
+      gasEstimate = await this.contract!.withdrawFees.estimateGas();
+    } catch (gasError) {
+      const error = gasError as EthereumError;
+      throw new Error(`Withdrawal will fail: ${error.reason || error.message}`);
+    }
+
+    const transaction: TransactionResponse = await this.contract!.withdrawFees({
+      gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+    });
+
+    const receipt = await transaction.wait();
+    return receipt!.hash;
+  } catch (error) {
+    const err = error as EthereumError;
+    console.error('Error withdrawing fees:', err);
+    
+    if (err.code === 'USER_REJECTED' || err.code === 4001) {
+      throw new Error('Transaction rejected');
+    } else {
+      throw new Error(`Withdrawal failed: ${err.message || err}`);
+    }
+  }
+}
+
+public async withdrawAmount(amount: string): Promise<string> {
+  await this.ensureConnection();
+
+  try {
+    const amountInWei = ethers.parseEther(amount);
+
+    let gasEstimate: bigint;
+    try {
+      gasEstimate = await this.contract!.withdrawAmount.estimateGas(amountInWei);
+    } catch (gasError) {
+      const error = gasError as EthereumError;
+      throw new Error(`Withdrawal will fail: ${error.reason || error.message}`);
+    }
+
+    const transaction: TransactionResponse = await this.contract!.withdrawAmount(
+      amountInWei,
+      {
+        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+      }
+    );
+
+    const receipt = await transaction.wait();
+    return receipt!.hash;
+  } catch (error) {
+    const err = error as EthereumError;
+    console.error('Error withdrawing amount:', err);
+    
+    if (err.code === 'USER_REJECTED' || err.code === 4001) {
+      throw new Error('Transaction rejected');
+    } else {
+      throw new Error(`Withdrawal failed: ${err.message || err}`);
+    }
+  }
+}
+
+public async updateListingPrice(newPrice: string): Promise<string> {
+  await this.ensureConnection();
+
+  try {
+    const priceInWei = ethers.parseEther(newPrice);
+
+    let gasEstimate: bigint;
+    try {
+      gasEstimate = await this.contract!.updateListingPrice.estimateGas(priceInWei);
+    } catch (gasError) {
+      const error = gasError as EthereumError;
+      throw new Error(`Update will fail: ${error.reason || error.message}`);
+    }
+
+    const transaction: TransactionResponse = await this.contract!.updateListingPrice(
+      priceInWei,
+      {
+        gasLimit: (gasEstimate * BigInt(130)) / BigInt(100),
+      }
+    );
+
+    const receipt = await transaction.wait();
+    return receipt!.hash;
+  } catch (error) {
+    const err = error as EthereumError;
+    console.error('Error updating listing price:', err);
+    
+    if (err.code === 'USER_REJECTED' || err.code === 4001) {
+      throw new Error('Transaction rejected');
+    } else {
+      throw new Error(`Update failed: ${err.message || err}`);
+    }
+  }
+}
 }
 
 export const blockchainService = new BlockchainService();
 
+// Utility functions
 export const formatAddress = (address: string): string => {
   if (!address) return "";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -785,18 +1013,16 @@ export const isValidAddress = (address: string): boolean => {
   }
 };
 
-export const getSupportedNetworks = () => {
-  return SUPPORTED_NETWORKS;
-};
-
-export const switchNetwork = async (chainId: string): Promise<void> => {
+export const switchNetwork = async (chainId: number): Promise<void> => {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("MetaMask is not installed");
   }
+
   try {
+    const hexChainId = `0x${chainId.toString(16)}`;
     await window.ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId }],
+      params: [{ chainId: hexChainId }],
     });
   } catch (error) {
     const err = error as EthereumError;

@@ -3,6 +3,7 @@
 import { AlertCircle, AlertTriangle, CheckCircle, ExternalLink, Loader2, Wallet, Wifi } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import React, { useEffect, useState } from 'react';
+import { getAllSupportedNetworks, isNetworkSupported } from '@/lib/networks';
 
 import { Button } from '@/app/components/ui/button';
 
@@ -25,8 +26,6 @@ interface ConnectWalletModalProps {
   walletInfo?: WalletInfo | null;
 }
 
-const SEPOLIA_CHAIN_ID = 11155111;
-
 const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
   isOpen,
   onClose,
@@ -35,11 +34,12 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
   walletInfo
 }) => {
   const [networkError, setNetworkError] = useState<string | null>(null);
+  const supportedNetworks = getAllSupportedNetworks();
 
   useEffect(() => {
     if (walletInfo?.network) {
-      if (walletInfo.network.chainId !== SEPOLIA_CHAIN_ID) {
-        setNetworkError(`Wrong network detected. Please switch to Sepolia Testnet (Chain ID: ${SEPOLIA_CHAIN_ID})`);
+      if (!isNetworkSupported(walletInfo.network.chainId)) {
+        setNetworkError(`Unsupported network detected. Please switch to one of our supported networks.`);
       } else {
         setNetworkError(null);
       }
@@ -51,22 +51,16 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
       setNetworkError(null);
       await onConnect(walletType);
     } catch (error: unknown) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error
-      ) {
+      if (typeof error === "object" && error !== null && "code" in error) {
         const { code } = error as { code?: number };
 
         if (code === 4902) {
-          setNetworkError("Sepolia network will be added to your wallet");
+          setNetworkError("Network will be added to your wallet");
           return;
         }
 
         if (code === -32002) {
-          setNetworkError(
-            "Please check your wallet for pending connection requests",
-          );
+          setNetworkError("Please check your wallet for pending connection requests");
           return;
         }
         
@@ -80,29 +74,33 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
     }
   };
 
+
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-neutral-900 border-neutral-800 text-white max-h-[90vh] max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-4xl overflow-y-auto">
         <DialogHeader className="flex flex-row items-center justify-between pb-4">
           <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold">
-            Connect to Sepolia Testnet
+            Connect Your Wallet
           </DialogTitle>
         </DialogHeader>
 
-        {/* Network Requirement Notice */}
+        {/* Supported Networks Notice */}
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-4">
           <div className="flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
             <div>
-              <h4 className="text-blue-400 font-medium mb-1">Sepolia Testnet Required</h4>
-              <p className="text-sm text-blue-200/80">
-                This application only works on Sepolia Testnet. If you don't have Sepolia in your wallet, 
-                it will be automatically added when you connect.
+              <h4 className="text-blue-400 font-medium mb-1">Multi-Chain Support</h4>
+              <p className="text-sm text-blue-200/80 mb-2">
+                This marketplace supports multiple blockchain networks. Connect your wallet and select a network.
               </p>
-              <div className="mt-2 text-xs text-blue-200/60">
-                <div>• Chain ID: 11155111</div>
-                <div>• Currency: ETH</div>
-                <div>• Get test ETH: <a href="https://sepoliafaucet.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-300">SepoliaFaucet.com</a></div>
+              <div className="text-xs text-blue-200/60">
+                <p className="font-semibold mb-1">Supported Networks:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {supportedNetworks.map(network => (
+                    <div key={network.chainId}>• {network.name} ({network.symbol})</div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -111,22 +109,22 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
         {/* Connected Wallet Info */}
         {walletInfo && (
           <div className={`rounded-lg p-4 mb-6 ${
-            walletInfo.network.chainId === SEPOLIA_CHAIN_ID 
+            isNetworkSupported(walletInfo.network.chainId)
               ? 'bg-green-500/10 border border-green-500/30' 
               : 'bg-red-500/10 border border-red-500/30'
           }`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className={`text-lg font-medium ${
-                walletInfo.network.chainId === SEPOLIA_CHAIN_ID 
+                isNetworkSupported(walletInfo.network.chainId)
                   ? 'text-green-400' 
                   : 'text-red-400'
               }`}>
-                {walletInfo.network.chainId === SEPOLIA_CHAIN_ID 
-                  ? 'Connected to Sepolia' 
-                  : 'Wrong Network'}
+                {isNetworkSupported(walletInfo.network.chainId)
+                  ? `Connected to ${walletInfo.network.name}` 
+                  : 'Unsupported Network'}
               </h3>
               <div className="flex items-center space-x-2">
-                {walletInfo.network.chainId === SEPOLIA_CHAIN_ID ? (
+                {isNetworkSupported(walletInfo.network.chainId) ? (
                   <>
                     <Wifi className="w-4 h-4 text-green-400" />
                     <span className="text-sm text-green-400">Connected</span>
@@ -134,7 +132,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                 ) : (
                   <>
                     <AlertTriangle className="w-4 h-4 text-red-400" />
-                    <span className="text-sm text-red-400">Wrong Network</span>
+                    <span className="text-sm text-red-400">Unsupported</span>
                   </>
                 )}
               </div>
@@ -152,7 +150,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                 <p className="text-sm text-gray-400 mb-1">Network</p>
                 <div className="flex items-center space-x-2">
                   <div className={`w-2 h-2 rounded-full ${
-                    walletInfo.network.chainId === SEPOLIA_CHAIN_ID 
+                    isNetworkSupported(walletInfo.network.chainId)
                       ? 'bg-green-400' 
                       : 'bg-red-400'
                   }`}></div>
@@ -172,7 +170,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
               <div>
                 <p className="text-sm text-gray-400 mb-1">Status</p>
                 <div className="flex items-center space-x-2">
-                  {walletInfo.network.chainId === SEPOLIA_CHAIN_ID ? (
+                  {isNetworkSupported(walletInfo.network.chainId) ? (
                     <>
                       <CheckCircle className="w-4 h-4 text-green-400" />
                       <span className="text-sm text-green-400">Ready to use</span>
@@ -187,14 +185,11 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
               </div>
             </div>
 
-            {walletInfo.network.chainId !== SEPOLIA_CHAIN_ID && (
+            {!isNetworkSupported(walletInfo.network.chainId) && (
               <div className="mt-4">
-                <Button
-                  onClick={() => handleConnect('metamask')}
-                  className="w-full bg-blue-600 hover:bg-blue-700"
-                >
-                  Switch to Sepolia Network
-                </Button>
+                <p className="text-yellow-400 text-sm mb-2">
+                  Please switch to one of the supported networks using the network selector after connecting.
+                </p>
               </div>
             )}
           </div>
@@ -211,7 +206,6 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
           {/* Left side - Wallet options */}
           <div className="order-1">
-            {/* Installed Section */}
             <div className="mb-4 sm:mb-6">
               <h3 className="text-purple-400 text-sm font-medium mb-3">
                 Installed
@@ -229,7 +223,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                     MetaMask
                   </div>
                   <div className="text-xs sm:text-sm text-neutral-400">
-                    Connect & Switch to Sepolia
+                    Connect to any supported network
                   </div>
                 </div>
                 {isConnecting && (
@@ -238,7 +232,6 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
               </Button>
             </div>
 
-            {/* Popular Section */}
             <div>
               <h3 className="text-neutral-400 text-sm font-medium mb-3">
                 Other Wallets (Coming Soon)
@@ -253,7 +246,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <div className="font-medium text-sm sm:text-base truncate">
-                      Rainbow
+                      WalletConnect
                     </div>
                   </div>
                 </Button>
@@ -278,7 +271,7 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
           {/* Right side - What is a Wallet info */}
           <div className="bg-neutral-800/50 rounded-lg p-4 sm:p-6 order-2 lg:order-none">
             <h3 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">
-              What is a Wallet?
+              Multi-Chain NFT Marketplace
             </h3>
 
             <div className="space-y-4 sm:space-y-6">
@@ -288,28 +281,24 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
                 </div>
                 <div className="min-w-0">
                   <h4 className="font-semibold mb-1 sm:mb-2 text-sm sm:text-base">
-                    A Home for your Digital Assets
+                    Multiple Networks Supported
                   </h4>
                   <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
-                    Wallets are used to send, receive, store, and display
-                    digital assets like Ethereum and NFTs.
+                    Trade NFTs across {supportedNetworks.length} different blockchain networks. Switch networks anytime using the network selector.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start space-x-3 sm:space-x-4">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-pink-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 bg-white rounded-lg flex items-center justify-center">
-                    <div className="w-2 h-2 sm:w-3 sm:h-3 bg-gradient-to-br from-pink-500 to-purple-600 rounded"></div>
-                  </div>
+                  <Wifi className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                 </div>
                 <div className="min-w-0">
                   <h4 className="font-semibold mb-1 sm:mb-2 text-sm sm:text-base">
-                    A New Way to Log In
+                    Seamless Network Switching
                   </h4>
                   <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
-                    Instead of creating new accounts and passwords on every
-                    website, just connect your wallet.
+                    Easily switch between supported networks with a single click. Your NFTs are network-specific.
                   </p>
                 </div>
               </div>
@@ -332,24 +321,19 @@ const ConnectWalletModal: React.FC<ConnectWalletModalProps> = ({
               </Button>
             </div>
 
-            {/* Sepolia Network Info */}
+            {/* Network List */}
             <div className="mt-6 p-3 bg-gray-900/50 rounded border border-gray-700">
               <h4 className="text-sm font-medium mb-2 flex items-center">
-                <AlertCircle className="w-4 h-4 mr-2 text-blue-400" />
-                Sepolia Testnet Info
+                <Wifi className="w-4 h-4 mr-2 text-purple-400" />
+                Supported Networks
               </h4>
-              <div className="text-xs text-gray-400 space-y-1">
-                <div><strong>Chain ID:</strong> 11155111</div>
-                <div><strong>RPC URL:</strong> https://rpc.sepolia.org</div>
-                <div><strong>Currency:</strong> SepoliaETH (ETH)</div>
-                <div><strong>Explorer:</strong> sepolia.etherscan.io</div>
-                <div className="pt-2 border-t border-gray-700 mt-2">
-                  <strong>Get Test ETH:</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-0.5">
-                    <li><a href="https://sepoliafaucet.com/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">SepoliaFaucet.com</a></li>
-                    <li><a href="https://www.alchemy.com/faucets/ethereum-sepolia" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Alchemy Faucet</a></li>
-                  </ul>
-                </div>
+              <div className="space-y-2">
+                {supportedNetworks.map(network => (
+                  <div key={network.chainId} className="text-xs text-gray-400 flex items-center justify-between">
+                    <span>• {network.name}</span>
+                    <span className="text-gray-500">({network.symbol})</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

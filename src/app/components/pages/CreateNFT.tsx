@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle, Cloud, ImageIcon, Loader2, Palette, Sparkles, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Cloud, Image, Loader2, Palette, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import React, { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
@@ -21,7 +21,7 @@ type CreationMode = "upload" | "generate";
 interface CreateNFTProps {
   isConnected: boolean;
   account: string;
-  onConnectionChange?: () => void; // Add callback for connection changes
+  onConnectionChange?: () => void;
 }
 
 interface IPFSUploadResult {
@@ -40,14 +40,12 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
   const [nftImage, setNftImage] = useState<string>("");
   const [nftTitle, setNftTitle] = useState<string>("");
   const [nftDescription, setNftDescription] = useState<string>("");
-  const [nftPrice, setNftPrice] = useState<string>("");
   const [creationMode, setCreationMode] = useState<CreationMode>("upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [ipfsData, setIpfsData] = useState<IPFSUploadResult | null>(null);
   const [isUploadedToIPFS, setIsUploadedToIPFS] = useState<boolean>(false);
-  const [connectionStatus, setConnectionStatus] = useState<string>(''); // Add connection status tracking
+  const [connectionStatus, setConnectionStatus] = useState<string>('');
 
-  // Verify wallet connection status on mount and when account changes
   useEffect(() => {
     const verifyConnection = async () => {
       if (isConnected && account) {
@@ -223,28 +221,16 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
       alert("Please upload to IPFS first before minting.");
       return;
     }
-    if (!nftPrice.trim()) {
-      alert("Please enter a price for your NFT.");
-      return;
-    }
     if (!isConnected) {
       alert("Please connect your wallet to mint an NFT.");
-      return;
-    }
-
-    const priceNum = parseFloat(nftPrice);
-    if (isNaN(priceNum) || priceNum <= 0) {
-      alert("Please enter a valid price greater than 0.");
       return;
     }
 
     setIsMinting(true);
 
     try {
-      // Double-check wallet connection before minting
       const currentAccount = await blockchainService.getCurrentAccount();
       if (!currentAccount) {
-        // Try to reconnect
         const reconnectedAccount = await blockchainService.connectWallet();
         if (!reconnectedAccount) {
           throw new Error("Failed to connect wallet. Please try connecting again.");
@@ -255,37 +241,31 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
       const category = creationMode === 'generate' ? "ai-generated" : "uploaded";
 
       const result = await blockchainService.mintNFT(
-        nftTitle,
-        nftDescription,
         ipfsData.metadataUrl,
-        nftPrice,
-        category,
+        category
       );
-      
+
       console.log('Mint result:', result);
+
       alert(`NFT successfully minted!\nToken ID: ${result.tokenId}\nTransaction Hash: ${result.transactionHash}`);
-      
-      // Reset form
+
       resetForm();
-      
+
     } catch (error) {
       console.error('Error minting NFT:', error);
-      
-      // Provide more specific error handling
+
       let errorMessage = 'Unknown error occurred';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
-      
-      // Check if it's a connection issue
+
       if (errorMessage.includes('Wallet not connected') || errorMessage.includes('not connected')) {
         errorMessage += '\n\nTip: Try disconnecting and reconnecting your wallet, then refresh the page.';
-        // Trigger connection state update
         if (onConnectionChange) {
           onConnectionChange();
         }
       }
-      
+
       alert(`Error minting NFT: ${errorMessage}`);
     } finally {
       setIsMinting(false);
@@ -295,7 +275,6 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
   const resetForm = (): void => {
     setNftTitle('');
     setNftDescription('');
-    setNftPrice('');
     setNftImage('');
     setPrompt('');
     setUploadedFile(null);
@@ -327,11 +306,10 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
           Upload your own artwork or generate unique art using AI to create NFTs.
         </CardDescription>
         
-        {/* Connection Status Indicator */}
         {connectionStatus && (
           <div className={`text-sm px-3 py-1 rounded-full inline-flex items-center w-fit ${
             connectionStatus.includes('verified') || connectionStatus.includes('Connected') 
-              ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+              ? 'bg-green-500/20 text-green-400 border border-green-500/30'
               : connectionStatus.includes('mismatch') || connectionStatus.includes('failed')
               ? 'bg-red-500/20 text-red-400 border border-red-500/30'
               : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
@@ -347,14 +325,14 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-4 mb-6">
-          <Button
+            <Button
             variant={creationMode === "upload" ? "default" : "outline"}
             onClick={() => handleCreationModeChange("upload")}
-            className="h-9 text-sm sm:text-base bg-neutral-800 border-neutral-700 hover:bg-neutral-700"
-          >
+            className="h-9 text-white text-sm sm:text-base bg-neutral-800 border-neutral-700 hover:bg-neutral-700 hover:text-white"
+            >
             <Upload className="mr-2 h-4 w-4" />
             Upload Image
-          </Button>
+            </Button>
           <Button
             variant={creationMode === "generate" ? "default" : "outline"}
             onClick={() => handleCreationModeChange("generate")}
@@ -365,9 +343,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
           </Button>
         </div>
 
-        {/* Content Area */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-          {/* Left Column - Creation */}
           <div className="space-y-6">
             {creationMode === "upload" ? (
               <div>
@@ -386,7 +362,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
                     htmlFor="image-upload"
                     className="cursor-pointer block"
                   >
-                    <ImageIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-neutral-500 mb-3 sm:mb-4" />
+                    <Image className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-neutral-500 mb-3 sm:mb-4" />
                     <p className="text-white/80 text-sm sm:text-base mb-2">
                       Click to upload an image
                     </p>
@@ -414,21 +390,21 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
                   <label className="text-white font-medium block mb-3 text-sm sm:text-base">
                     Art Style
                   </label>
-                  <Select
+                    <Select
                     value={selectedStyle}
                     onValueChange={handleStyleChange}
-                  >
+                    >
                     <SelectTrigger className="bg-neutral-800 border-neutral-700 text-white h-11 sm:h-12">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-neutral-800 border-neutral-700">
-                      <SelectItem value="realistic">Realistic</SelectItem>
-                      <SelectItem value="abstract">Abstract</SelectItem>
-                      <SelectItem value="cyberpunk">Cyberpunk</SelectItem>
-                      <SelectItem value="fantasy">Fantasy</SelectItem>
-                      <SelectItem value="minimalist">Minimalist</SelectItem>
+                      <SelectItem value="realistic" className="text-white">Realistic</SelectItem>
+                      <SelectItem value="abstract" className="text-white">Abstract</SelectItem>
+                      <SelectItem value="cyberpunk" className="text-white">Cyberpunk</SelectItem>
+                      <SelectItem value="fantasy" className="text-white">Fantasy</SelectItem>
+                      <SelectItem value="minimalist" className="text-white">Minimalist</SelectItem>
                     </SelectContent>
-                  </Select>
+                    </Select>
                 </div>
 
                 <Button
@@ -451,7 +427,6 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
               </div>
             )}
 
-            {/* NFT Details Form */}
             <div className="space-y-4 sm:space-y-6">
               <div>
                 <label className="text-white font-medium block mb-3 text-sm sm:text-base">
@@ -476,27 +451,10 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
                   className="bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-400 min-h-[80px] sm:min-h-[100px] text-sm sm:text-base"
                 />
               </div>
-
-              <div>
-                <label className="text-white font-medium block mb-3 text-sm sm:text-base">
-                  Price (ETH)
-                </label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0.001"
-                  placeholder="0.1"
-                  value={nftPrice}
-                  onChange={(e) => setNftPrice(e.target.value)}
-                  className="bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-400 h-11 sm:h-12 text-sm sm:text-base"
-                />
-              </div>
             </div>
           </div>
 
-          {/* Right Column - Preview & Actions */}
           <div className="space-y-6">
-            {/* Image Preview */}
             {nftImage && (
               <div>
                 <h3 className="text-white font-medium mb-3 text-sm sm:text-base">
@@ -512,9 +470,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="space-y-3 sm:space-y-4">
-              {/* IPFS Upload Button */}
               <Button
                 onClick={uploadToIPFS}
                 disabled={
@@ -548,7 +504,6 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
                 )}
               </Button>
 
-              {/* IPFS Success Message */}
               {isUploadedToIPFS && ipfsData && (
                 <div className="p-3 sm:p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <h4 className="text-green-400 font-medium mb-2 text-sm sm:text-base">
@@ -581,13 +536,11 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
                 </div>
               )}
 
-              {/* Mint NFT Button */}
               <Button
                 onClick={mintNFT}
                 disabled={
                   !isUploadedToIPFS ||
                   !ipfsData?.metadataUrl ||
-                  !nftPrice.trim() ||
                   !isConnected ||
                   isMinting
                 }
@@ -607,7 +560,6 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
               </Button>
             </div>
 
-            {/* Status Messages */}
             <div className="space-y-2">
               {!isConnected && (
                 <p className="text-red-400 text-xs sm:text-sm text-center p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -623,17 +575,7 @@ const CreateNFT: React.FC<CreateNFTProps> = ({ isConnected, account, onConnectio
 
               {isConnected &&
                 isUploadedToIPFS &&
-                ipfsData &&
-                !nftPrice.trim() && (
-                  <p className="text-yellow-400 text-xs sm:text-sm text-center p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                    ⚠️ Please enter a price to mint your NFT
-                  </p>
-                )}
-
-              {isConnected &&
-                isUploadedToIPFS &&
-                ipfsData &&
-                nftPrice.trim() && (
+                ipfsData && (
                   <p className="text-green-400 text-xs sm:text-sm text-center p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                     ✅ Ready to mint! Click &quot;Mint NFT&quot; to create your token
                   </p>

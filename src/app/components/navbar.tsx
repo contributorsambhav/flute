@@ -1,28 +1,20 @@
 "use client";
 
-import { Home, Plus, ShoppingCart, User, Wallet, Zap } from "lucide-react";
+import { ChevronDown, Home, Plus, Settings, ShoppingCart, User, Wallet, Zap } from "lucide-react";
+import {
+  NetworkConfig,
+  getAllSupportedNetworks,
+  getNetworkConfig,
+  isNetworkSupported
+} from "@/lib/networks";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "./ui/button";
 import ConnectWalletModal from "./modals/ConnectWallet";
 import WalletProfileDropdown from "./modals/WalletProfileDropdown";
+import { ethers } from "ethers";
 import { instrumentSerif } from "@/lib/fonts";
-
-// Sepolia network configuration
-const SEPOLIA_NETWORK = {
-  chainId: "0xaa36a7", // 11155111 in hex
-  chainName: "Sepolia Test Network",
-  nativeCurrency: {
-    name: "SepoliaETH",
-    symbol: "ETH",
-    decimals: 18,
-  },
-  rpcUrls: ["https://rpc.sepolia.org"],
-  blockExplorerUrls: ["https://sepolia.etherscan.io"],
-};
-
-const SEPOLIA_CHAIN_ID = 11155111;
 
 interface WalletInfo {
   address: string;
@@ -35,22 +27,37 @@ interface WalletInfo {
   };
 }
 
+interface ErrorWithCode {
+  code?: number;
+  message?: string;
+}
+
 export default function Navbar({
   account,
   setAccount,
   isConnected,
   setIsConnected,
+  setCurrentChainId,
+  isOwner,
+  setIsOwner,
 }: {
   account: string;
   setAccount: (account: string) => void;
   isConnected: boolean;
   setIsConnected: (isConnected: boolean) => void;
+  currentChainId: number;
+  setCurrentChainId: (chainId: number) => void;
+  isOwner: boolean;
+  setIsOwner: (isOwner: boolean) => void;
 }) {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>("marketplace");
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [networkError, setNetworkError] = useState<string>("");
+  const [currentNetwork, setCurrentNetwork] = useState<NetworkConfig | null>(null);
+  const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState<boolean>(false);
+  const [isCheckingOwnership, setIsCheckingOwnership] = useState<boolean>(false);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,42 +72,113 @@ export default function Navbar({
     checkExistingConnection();
   }, []);
 
+  // Check if user is contract owner from the smart contract
+  useEffect(() => {
+    const checkOwnership = async () => {
+      if (!isConnected || !account || !currentNetwork) {
+        setIsOwner(false);
+        return;
+      }
+
+      try {
+        setIsCheckingOwnership(true);
+        
+        // Get contract address for current network
+        const contractAddress = currentNetwork.contractAddress;
+        
+        if (!contractAddress) {
+          console.warn('No contract address for current network');
+          setIsOwner(false);
+          return;
+        }
+
+        if (!window.ethereum) {
+          console.warn('Ethereum provider not available');
+          setIsOwner(false);
+          return;
+        }
+
+        // Create provider and contract instance using ethers.js
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        
+        // Minimal ABI for owner() function
+        const minimalABI = [
+          "function owner() view returns (address)"
+        ];
+        
+        const contract = new ethers.Contract(contractAddress, minimalABI, provider);
+        
+        // Call owner() function
+        const ownerAddress = await contract.owner();
+        
+        // Compare addresses (case-insensitive)
+        const isOwnerResult = account.toLowerCase() === ownerAddress.toLowerCase();
+        
+        setIsOwner(isOwnerResult);
+        
+        if (isOwnerResult) {
+          console.log('✅ Admin access granted');
+        }
+      } catch (error) {
+        console.error('Error checking ownership from contract:', error);
+        setIsOwner(false);
+      } finally {
+        setIsCheckingOwnership(false);
+      }
+    };
+
+    checkOwnership();
+  }, [isConnected, account, currentNetwork, setIsOwner]);
+
   // Listen for account and network changes
   useEffect(() => {
     if (typeof window !== "undefined" && window.ethereum) {
       const handleAccountsChanged = (accounts: string[]) => {
         if (accounts.length === 0) {
-          // User disconnected
           handleDisconnect();
         } else if (accounts[0] !== account) {
-          // Account changed
           checkConnection(accounts[0]);
         }
       };
 
-      const handleChainChanged = () => {
-        // Reload the page when chain changes
-        window.location.reload();
+      const handleChainChanged = async (chainId: string) => {
+        const chainIdNumber = parseInt(chainId, 16);
+        const network = getNetworkConfig(chainIdNumber);
+        
+        if (network) {
+          setCurrentNetwork(network);
+          setCurrentChainId(chainIdNumber);
+          setNetworkError("");
+          // Reload wallet info with new network
+          if (account) {
+            await checkConnection(account);
+          }
+        } else {
+          setNetworkError("Unsupported network");
+          setCurrentNetwork(null);
+        }
       };
 
-      window.ethereum.on("accountsChanged", handleAccountsChanged);
-      window.ethereum.on("chainChanged", handleChainChanged);
+      // Type assertion for event listeners - MetaMask passes specific types
+      // accountsChanged passes array of accounts, chainChanged passes chainId string
+      window.ethereum.on("accountsChanged", handleAccountsChanged as never);
+      window.ethereum.on("chainChanged", handleChainChanged as never);
 
       return () => {
         if (window.ethereum) {
-          window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-          window.ethereum.removeListener("chainChanged", handleChainChanged);
+          window.ethereum.removeListener("accountsChanged", handleAccountsChanged as never);
+          window.ethereum.removeListener("chainChanged", handleChainChanged as never);
         }
       };
     }
-  }, [account]);
+  }, [account, setCurrentChainId]);
 
   const checkExistingConnection = async () => {
     if (typeof window !== "undefined" && window.ethereum) {
       try {
         const accounts = await window.ethereum.request({ 
           method: "eth_accounts" 
-        });
+        }) as string[];
         
         if (accounts.length > 0) {
           await checkConnection(accounts[0]);
@@ -118,14 +196,17 @@ export default function Navbar({
     }
 
     try {
-      const chainId = await window.ethereum.request({ method: "eth_chainId" });
+      const chainId = await window.ethereum.request({ method: "eth_chainId" }) as string;
       const chainIdNumber = parseInt(chainId, 16);
+      const network = getNetworkConfig(chainIdNumber);
 
-      if (chainIdNumber !== SEPOLIA_CHAIN_ID) {
-        setNetworkError("Please switch to Sepolia network");
+      if (!network) {
+        setNetworkError("Unsupported network");
         setIsConnected(false);
         setAccount("");
         setWalletInfo(null);
+        setCurrentNetwork(null);
+        setCurrentChainId(0);
         return;
       }
 
@@ -133,7 +214,7 @@ export default function Navbar({
       const balance = await window.ethereum.request({
         method: "eth_getBalance",
         params: [address, "latest"],
-      });
+      }) as string;
 
       const balanceInEth = (parseInt(balance, 16) / 1e18).toFixed(4);
 
@@ -141,13 +222,15 @@ export default function Navbar({
         address,
         balance: balanceInEth,
         network: {
-          name: "Sepolia",
+          name: network.name,
           chainId: chainIdNumber,
-          symbol: "ETH",
-          isTestnet: true,
+          symbol: network.symbol,
+          isTestnet: network.isTestnet,
         },
       });
 
+      setCurrentNetwork(network);
+      setCurrentChainId(chainIdNumber);
       setIsConnected(true);
       setAccount(address);
       setNetworkError("");
@@ -157,32 +240,64 @@ export default function Navbar({
     }
   };
 
-  const switchToSepolia = async (): Promise<boolean> => {
+  const switchNetwork = async (networkConfig: NetworkConfig): Promise<void> => {
     if (!window.ethereum) {
-      throw new Error("MetaMask not found");
+      alert("MetaMask not found");
+      return;
     }
 
     try {
+      setIsNetworkDropdownOpen(false);
+      
+      // Try to switch to the network
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: SEPOLIA_NETWORK.chainId }],
+        params: [{ chainId: `0x${networkConfig.chainId.toString(16)}` }],
       });
-      return true;
-    } catch (switchError: any) {
+      
+      // Network switched successfully
+      setCurrentNetwork(networkConfig);
+      setCurrentChainId(networkConfig.chainId);
+      setNetworkError("");
+      
+      // Reload wallet info
+      if (account) {
+        await checkConnection(account);
+      }
+    } catch (switchError: unknown) {
       // This error code indicates that the chain has not been added to MetaMask
-      if (switchError.code === 4902) {
+      const error = switchError as ErrorWithCode;
+      if (error.code === 4902) {
         try {
           await window.ethereum.request({
             method: "wallet_addEthereumChain",
-            params: [SEPOLIA_NETWORK],
+            params: [{
+              chainId: `0x${networkConfig.chainId.toString(16)}`,
+              chainName: networkConfig.name,
+              nativeCurrency: {
+                name: networkConfig.symbol,
+                symbol: networkConfig.symbol,
+                decimals: 18,
+              },
+              rpcUrls: [networkConfig.rpcUrl],
+              blockExplorerUrls: [networkConfig.blockExplorer],
+            }],
           });
-          return true;
+          
+          setCurrentNetwork(networkConfig);
+          setCurrentChainId(networkConfig.chainId);
+          setNetworkError("");
         } catch (addError) {
-          console.error("Error adding Sepolia network:", addError);
-          throw new Error("Failed to add Sepolia network to MetaMask");
+          console.error("Error adding network:", addError);
+          setNetworkError(`Failed to add ${networkConfig.name}`);
         }
+      } else if (error.code === 4001) {
+        // User rejected the request
+        console.log("User rejected network switch");
+      } else {
+        console.error("Error switching network:", switchError);
+        setNetworkError("Failed to switch network");
       }
-      throw switchError;
     }
   };
 
@@ -192,9 +307,7 @@ export default function Navbar({
     router.push(`?${params.toString()}`, { scroll: false });
   };
 
-  const connectWallet = async (
-    walletType: string = "metamask",
-  ): Promise<void> => {
+  const connectWallet = async (walletType: string = "metamask"): Promise<void> => {
     setIsConnecting(true);
     setNetworkError("");
     
@@ -208,31 +321,32 @@ export default function Navbar({
         // Request accounts
         const accounts = await window.ethereum.request({
           method: "eth_requestAccounts",
-        });
+        }) as string[];
 
         if (accounts.length === 0) {
           throw new Error("No accounts found");
         }
 
         // Check current network
-        const chainId = await window.ethereum.request({ method: "eth_chainId" });
+        const chainId = await window.ethereum.request({ method: "eth_chainId" }) as string;
         const chainIdNumber = parseInt(chainId, 16);
+        const network = getNetworkConfig(chainIdNumber);
 
-        // If not on Sepolia, switch or add it
-        if (chainIdNumber !== SEPOLIA_CHAIN_ID) {
-          setNetworkError("Switching to Sepolia network...");
-          const switched = await switchToSepolia();
-          
-          if (!switched) {
-            throw new Error("Failed to switch to Sepolia network");
+        if (!network) {
+          setNetworkError("Please switch to a supported network");
+          // Get first supported network as default
+          const supportedNetworks = getAllSupportedNetworks();
+          if (supportedNetworks.length > 0) {
+            await switchNetwork(supportedNetworks[0]);
           }
+          return;
         }
 
         // Get balance
         const balance = await window.ethereum.request({
           method: "eth_getBalance",
           params: [accounts[0], "latest"],
-        });
+        }) as string;
 
         const balanceInEth = (parseInt(balance, 16) / 1e18).toFixed(4);
 
@@ -240,35 +354,39 @@ export default function Navbar({
           address: accounts[0],
           balance: balanceInEth,
           network: {
-            name: "Sepolia",
-            chainId: SEPOLIA_CHAIN_ID,
-            symbol: "ETH",
-            isTestnet: true,
+            name: network.name,
+            chainId: chainIdNumber,
+            symbol: network.symbol,
+            isTestnet: network.isTestnet,
           },
         });
 
+        setCurrentNetwork(network);
+        setCurrentChainId(chainIdNumber);
         setIsConnected(true);
         setAccount(accounts[0]);
         setIsWalletModalOpen(false);
         setNetworkError("");
       } else {
-        // For other wallet types, show a message
         alert(`${walletType} wallet connection coming soon! Please use MetaMask for now.`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error connecting wallet:", error);
       
-      if (error.code === 4001) {
+      const err = error as ErrorWithCode;
+      if (err.code === 4001) {
         setNetworkError("Connection request rejected");
-      } else if (error.code === -32002) {
+      } else if (err.code === -32002) {
         setNetworkError("Please check MetaMask for pending connection request");
       } else {
-        setNetworkError(error.message || "Failed to connect wallet");
+        setNetworkError(err.message || "Failed to connect wallet");
       }
       
       setIsConnected(false);
       setAccount("");
       setWalletInfo(null);
+      setCurrentNetwork(null);
+      setCurrentChainId(0);
     } finally {
       setIsConnecting(false);
     }
@@ -279,12 +397,16 @@ export default function Navbar({
     setAccount("");
     setWalletInfo(null);
     setNetworkError("");
+    setCurrentNetwork(null);
+    setCurrentChainId(0);
+    setIsOwner(false);
   };
 
   const navItems = [
     { id: "marketplace", label: "Marketplace", icon: Home },
     { id: "create", label: "Create", icon: Plus },
     { id: "my-nfts", label: "My NFTs", icon: User },
+    ...(isOwner ? [{ id: "admin", label: "Admin", icon: Settings }] : []),
   ];
 
   return (
@@ -327,6 +449,9 @@ export default function Navbar({
               >
                 <Icon className="h-4 w-4" />
                 <span>{item.label}</span>
+                {item.id === "admin" && isCheckingOwnership && (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                )}
               </button>
             );
           })}
@@ -347,6 +472,7 @@ export default function Navbar({
                     ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/25"
                     : "text-gray-300 hover:text-white hover:bg-white/10"
                 }`}
+                title={item.label}
               >
                 <Icon className="h-4 w-4" />
               </button>
@@ -386,11 +512,76 @@ export default function Navbar({
             </div>
           ) : (
             <div className="flex items-center space-x-3">
-              {/* Network Indicator - Hidden on mobile */}
-              <div className="hidden lg:flex items-center space-x-2 px-3 py-2 bg-black/30 border border-white/10 rounded-lg backdrop-blur-sm">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                <span className="text-xs text-gray-300 font-medium">Sepolia</span>
-              </div>
+              {/* Network Selector */}
+              {currentNetwork && (
+                <div className="relative">
+                  <button
+                    onClick={() => setIsNetworkDropdownOpen(!isNetworkDropdownOpen)}
+                    className="hidden lg:flex items-center space-x-2 px-3 py-2 bg-black/30 border border-white/10 rounded-lg backdrop-blur-sm hover:bg-white/10 transition-all duration-200"
+                  >
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${
+                      isNetworkSupported(currentNetwork.chainId) ? 'bg-green-400' : 'bg-red-400'
+                    }`} />
+                    <span className="text-xs text-gray-300 font-medium">
+                      {currentNetwork.name}
+                    </span>
+                    <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform duration-200 ${
+                      isNetworkDropdownOpen ? 'rotate-180' : ''
+                    }`} />
+                  </button>
+
+                  {/* Network Dropdown */}
+                  {isNetworkDropdownOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsNetworkDropdownOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-64 bg-neutral-900 border border-white/10 rounded-lg shadow-xl backdrop-blur-xl z-50 overflow-hidden">
+                        <div className="p-2 border-b border-white/10">
+                          <p className="text-xs text-gray-400 font-medium px-2 py-1">
+                            Select Network
+                          </p>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {getAllSupportedNetworks().map((network) => (
+                            <button
+                              key={network.chainId}
+                              onClick={() => switchNetwork(network)}
+                              className={`w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors ${
+                                currentNetwork.chainId === network.chainId ? 'bg-white/10' : ''
+                              }`}
+                            >
+                              <div className="flex items-center space-x-3">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  currentNetwork.chainId === network.chainId 
+                                    ? 'bg-green-400' 
+                                    : 'bg-gray-400'
+                                }`} />
+                                <div className="text-left">
+                                  <p className="text-sm text-white font-medium">
+                                    {network.name}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    {network.symbol}
+                                  </p>
+                                </div>
+                              </div>
+                              {currentNetwork.chainId === network.chainId && (
+                                <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Cart Button */}
               <Button 
@@ -405,7 +596,7 @@ export default function Navbar({
               <div className="relative">
                 <WalletProfileDropdown
                   account={account}
-                  balance={walletInfo ? `${walletInfo.balance} ETH` : "0 ETH"}
+                  balance={walletInfo ? `${walletInfo.balance} ${currentNetwork?.symbol || 'ETH'}` : "0 ETH"}
                   onDisconnect={handleDisconnect}
                 />
               </div>
