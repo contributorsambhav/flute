@@ -21,27 +21,25 @@ export const SUPPORTED_NETWORKS: Record<number, NetworkConfig> = {
     isTestnet: true,
     faucets: [
       'https://sepoliafaucet.com/',
-      'https://www.alchemy.com/faucets/ethereum-sepolia'
+      'https://cloud.google.com/application/web3/faucet/ethereum/sepolia'
     ]
   },
 
-  // ✅ Sonic Testnet
   14601: {
     chainId: 14601,
     name: 'Sonic Testnet',
     symbol: 'S',
     rpcUrl: 'https://rpc.testnet.soniclabs.com',
-    blockExplorer: 'https://testnet.soniclabs.com',
-    contractAddress: '0x286C776439Be2cEA7823F2c4FB0845aA7cC95003', // replace after deployment
+    blockExplorer: 'https://testnet.sonicscan.org',
+    contractAddress: '0x286C776439Be2cEA7823F2c4FB0845aA7cC95003',
     isTestnet: true,
     faucets: [
-      'https://testnet.soniclabs.com/faucet'
+      'https://testnet.soniclabs.com/account'
     ]
   }
 };
 
-
-export const DEFAULT_NETWORK = SUPPORTED_NETWORKS[11155111]; // Sepolia as default
+export const DEFAULT_NETWORK = SUPPORTED_NETWORKS[11155111];
 
 export const getNetworkConfig = (chainId: number): NetworkConfig | undefined => {
   return SUPPORTED_NETWORKS[chainId];

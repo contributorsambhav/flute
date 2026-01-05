@@ -32,6 +32,16 @@ interface ErrorWithCode {
   message?: string;
 }
 
+interface WalletConnectProvider {
+  enable: () => Promise<string[]>;
+  request: (args: { method: string; params?: any[] }) => Promise<any>;
+  disconnect: () => Promise<void>;
+  on: (event: string, handler: (...args: any[]) => void) => void;
+  removeListener: (event: string, handler: (...args: any[]) => void) => void;
+  accounts: string[];
+  chainId: number;
+}
+
 export default function Navbar({
   account,
   setAccount,
@@ -58,6 +68,8 @@ export default function Navbar({
   const [currentNetwork, setCurrentNetwork] = useState<NetworkConfig | null>(null);
   const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState<boolean>(false);
   const [isCheckingOwnership, setIsCheckingOwnership] = useState<boolean>(false);
+  const [walletProvider, setWalletProvider] = useState<any>(null);
+  const [walletType, setWalletType] = useState<'metamask' | 'walletconnect' | null>(null);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,12 +79,10 @@ export default function Navbar({
     setActiveTab(tab);
   }, [searchParams]);
 
-  // Check if already connected on mount
   useEffect(() => {
     checkExistingConnection();
   }, []);
 
-  // Check if user is contract owner from the smart contract
   useEffect(() => {
     const checkOwnership = async () => {
       if (!isConnected || !account || !currentNetwork) {
@@ -83,7 +93,6 @@ export default function Navbar({
       try {
         setIsCheckingOwnership(true);
         
-        // Get contract address for current network
         const contractAddress = currentNetwork.contractAddress;
         
         if (!contractAddress) {
@@ -92,26 +101,22 @@ export default function Navbar({
           return;
         }
 
-        if (!window.ethereum) {
-          console.warn('Ethereum provider not available');
+        if (!walletProvider) {
+          console.warn('Wallet provider not available');
           setIsOwner(false);
           return;
         }
 
-        // Create provider and contract instance using ethers.js
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider(walletProvider);
         
-        // Minimal ABI for owner() function
         const minimalABI = [
           "function owner() view returns (address)"
         ];
         
         const contract = new ethers.Contract(contractAddress, minimalABI, provider);
         
-        // Call owner() function
         const ownerAddress = await contract.owner();
         
-        // Compare addresses (case-insensitive)
         const isOwnerResult = account.toLowerCase() === ownerAddress.toLowerCase();
         
         setIsOwner(isOwnerResult);
@@ -128,50 +133,63 @@ export default function Navbar({
     };
 
     checkOwnership();
-  }, [isConnected, account, currentNetwork, setIsOwner]);
+  }, [isConnected, account, currentNetwork, setIsOwner, walletProvider]);
 
-  // Listen for account and network changes
   useEffect(() => {
-    if (typeof window !== "undefined" && window.ethereum) {
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          handleDisconnect();
-        } else if (accounts[0] !== account) {
-          checkConnection(accounts[0]);
-        }
-      };
+    if (!walletProvider) return;
 
-      const handleChainChanged = async (chainId: string) => {
-        const chainIdNumber = parseInt(chainId, 16);
-        const network = getNetworkConfig(chainIdNumber);
-        
-        if (network) {
-          setCurrentNetwork(network);
-          setCurrentChainId(chainIdNumber);
-          setNetworkError("");
-          // Reload wallet info with new network
-          if (account) {
-            await checkConnection(account);
-          }
-        } else {
-          setNetworkError("Unsupported network");
-          setCurrentNetwork(null);
-        }
-      };
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length === 0) {
+        handleDisconnect();
+      } else if (accounts[0] !== account) {
+        checkConnection(accounts[0]);
+      }
+    };
 
-      // Type assertion for event listeners - MetaMask passes specific types
-      // accountsChanged passes array of accounts, chainChanged passes chainId string
+    const handleChainChanged = async (chainId: string | number) => {
+      const chainIdNumber = typeof chainId === 'string' ? parseInt(chainId, 16) : chainId;
+      const network = getNetworkConfig(chainIdNumber);
+      
+      if (network) {
+        setCurrentNetwork(network);
+        setCurrentChainId(chainIdNumber);
+        setNetworkError("");
+        if (account) {
+          await checkConnection(account);
+        }
+      } else {
+        setNetworkError("Unsupported network");
+        setCurrentNetwork(null);
+      }
+    };
+
+    const handleDisconnectEvent = () => {
+      console.log('Wallet disconnected');
+      handleDisconnect();
+    };
+
+    if (walletType === 'metamask' && typeof window !== "undefined" && window.ethereum) {
       window.ethereum.on("accountsChanged", handleAccountsChanged as never);
       window.ethereum.on("chainChanged", handleChainChanged as never);
-
-      return () => {
-        if (window.ethereum) {
-          window.ethereum.removeListener("accountsChanged", handleAccountsChanged as never);
-          window.ethereum.removeListener("chainChanged", handleChainChanged as never);
-        }
-      };
+      window.ethereum.on("disconnect", handleDisconnectEvent as never);
+    } else if (walletType === 'walletconnect' && walletProvider) {
+      walletProvider.on("accountsChanged", handleAccountsChanged);
+      walletProvider.on("chainChanged", handleChainChanged);
+      walletProvider.on("disconnect", handleDisconnectEvent);
     }
-  }, [account, setCurrentChainId]);
+
+    return () => {
+      if (walletType === 'metamask' && typeof window !== "undefined" && window.ethereum) {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged as never);
+        window.ethereum.removeListener("chainChanged", handleChainChanged as never);
+        window.ethereum.removeListener("disconnect", handleDisconnectEvent as never);
+      } else if (walletType === 'walletconnect' && walletProvider) {
+        walletProvider.removeListener("accountsChanged", handleAccountsChanged);
+        walletProvider.removeListener("chainChanged", handleChainChanged);
+        walletProvider.removeListener("disconnect", handleDisconnectEvent);
+      }
+    };
+  }, [account, setCurrentChainId, walletProvider, walletType]);
 
   const checkExistingConnection = async () => {
     if (typeof window !== "undefined" && window.ethereum) {
@@ -181,6 +199,8 @@ export default function Navbar({
         }) as string[];
         
         if (accounts.length > 0) {
+          setWalletProvider(window.ethereum);
+          setWalletType('metamask');
           await checkConnection(accounts[0]);
         }
       } catch (error) {
@@ -190,14 +210,17 @@ export default function Navbar({
   };
 
   const checkConnection = async (address: string) => {
-    if (!window.ethereum) {
-      setNetworkError("MetaMask not found");
+    if (!walletProvider) {
+      setNetworkError("Wallet provider not found");
       return;
     }
 
     try {
-      const chainId = await window.ethereum.request({ method: "eth_chainId" }) as string;
-      const chainIdNumber = parseInt(chainId, 16);
+      const chainIdResult = await walletProvider.request({ method: "eth_chainId" });
+      const chainIdNumber = typeof chainIdResult === 'string' 
+        ? parseInt(chainIdResult, 16) 
+        : chainIdResult;
+      
       const network = getNetworkConfig(chainIdNumber);
 
       if (!network) {
@@ -210,8 +233,7 @@ export default function Navbar({
         return;
       }
 
-      // Get balance
-      const balance = await window.ethereum.request({
+      const balance = await walletProvider.request({
         method: "eth_getBalance",
         params: [address, "latest"],
       }) as string;
@@ -241,35 +263,31 @@ export default function Navbar({
   };
 
   const switchNetwork = async (networkConfig: NetworkConfig): Promise<void> => {
-    if (!window.ethereum) {
-      alert("MetaMask not found");
+    if (!walletProvider) {
+      alert("Wallet not connected");
       return;
     }
 
     try {
       setIsNetworkDropdownOpen(false);
       
-      // Try to switch to the network
-      await window.ethereum.request({
+      await walletProvider.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: `0x${networkConfig.chainId.toString(16)}` }],
       });
       
-      // Network switched successfully
       setCurrentNetwork(networkConfig);
       setCurrentChainId(networkConfig.chainId);
       setNetworkError("");
       
-      // Reload wallet info
       if (account) {
         await checkConnection(account);
       }
     } catch (switchError: unknown) {
-      // This error code indicates that the chain has not been added to MetaMask
       const error = switchError as ErrorWithCode;
       if (error.code === 4902) {
         try {
-          await window.ethereum.request({
+          await walletProvider.request({
             method: "wallet_addEthereumChain",
             params: [{
               chainId: `0x${networkConfig.chainId.toString(16)}`,
@@ -292,7 +310,6 @@ export default function Navbar({
           setNetworkError(`Failed to add ${networkConfig.name}`);
         }
       } else if (error.code === 4001) {
-        // User rejected the request
         console.log("User rejected network switch");
       } else {
         console.error("Error switching network:", switchError);
@@ -307,18 +324,20 @@ export default function Navbar({
     router.push(`?${params.toString()}`, { scroll: false });
   };
 
-  const connectWallet = async (walletType: string = "metamask"): Promise<void> => {
+  const connectWallet = async (
+    walletTypeParam: string = "metamask", 
+    provider?: WalletConnectProvider
+  ): Promise<void> => {
     setIsConnecting(true);
     setNetworkError("");
     
     try {
-      if (walletType === "metamask") {
+      if (walletTypeParam === "metamask") {
         if (typeof window === "undefined" || !window.ethereum) {
           alert("Please install MetaMask to connect your wallet.");
           return;
         }
 
-        // Request accounts
         const accounts = await window.ethereum.request({
           method: "eth_requestAccounts",
         }) as string[];
@@ -327,14 +346,15 @@ export default function Navbar({
           throw new Error("No accounts found");
         }
 
-        // Check current network
+        setWalletProvider(window.ethereum);
+        setWalletType('metamask');
+
         const chainId = await window.ethereum.request({ method: "eth_chainId" }) as string;
         const chainIdNumber = parseInt(chainId, 16);
         const network = getNetworkConfig(chainIdNumber);
 
         if (!network) {
           setNetworkError("Please switch to a supported network");
-          // Get first supported network as default
           const supportedNetworks = getAllSupportedNetworks();
           if (supportedNetworks.length > 0) {
             await switchNetwork(supportedNetworks[0]);
@@ -342,7 +362,6 @@ export default function Navbar({
           return;
         }
 
-        // Get balance
         const balance = await window.ethereum.request({
           method: "eth_getBalance",
           params: [accounts[0], "latest"],
@@ -367,8 +386,55 @@ export default function Navbar({
         setAccount(accounts[0]);
         setIsWalletModalOpen(false);
         setNetworkError("");
-      } else {
-        alert(`${walletType} wallet connection coming soon! Please use MetaMask for now.`);
+
+      } else if (walletTypeParam === "walletconnect" && provider) {
+        const accounts = provider.accounts;
+        const chainId = provider.chainId;
+
+        if (!accounts || accounts.length === 0) {
+          throw new Error("No accounts found in WalletConnect");
+        }
+
+        setWalletProvider(provider);
+        setWalletType('walletconnect');
+
+        const network = getNetworkConfig(chainId);
+
+        if (!network) {
+          setNetworkError("Please switch to a supported network");
+          const supportedNetworks = getAllSupportedNetworks();
+          if (supportedNetworks.length > 0) {
+            await switchNetwork(supportedNetworks[0]);
+          }
+          return;
+        }
+
+        const balance = await provider.request({
+          method: "eth_getBalance",
+          params: [accounts[0], "latest"],
+        }) as string;
+
+        const balanceInEth = (parseInt(balance, 16) / 1e18).toFixed(4);
+
+        setWalletInfo({
+          address: accounts[0],
+          balance: balanceInEth,
+          network: {
+            name: network.name,
+            chainId: chainId,
+            symbol: network.symbol,
+            isTestnet: network.isTestnet,
+          },
+        });
+
+        setCurrentNetwork(network);
+        setCurrentChainId(chainId);
+        setIsConnected(true);
+        setAccount(accounts[0]);
+        setIsWalletModalOpen(false);
+        setNetworkError("");
+
+        console.log('✅ WalletConnect connected successfully');
       }
     } catch (error: unknown) {
       console.error("Error connecting wallet:", error);
@@ -377,7 +443,7 @@ export default function Navbar({
       if (err.code === 4001) {
         setNetworkError("Connection request rejected");
       } else if (err.code === -32002) {
-        setNetworkError("Please check MetaMask for pending connection request");
+        setNetworkError("Please check your wallet for pending connection request");
       } else {
         setNetworkError(err.message || "Failed to connect wallet");
       }
@@ -387,12 +453,22 @@ export default function Navbar({
       setWalletInfo(null);
       setCurrentNetwork(null);
       setCurrentChainId(0);
+      setWalletProvider(null);
+      setWalletType(null);
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleDisconnect = (): void => {
+  const handleDisconnect = async (): Promise<void> => {
+    if (walletType === 'walletconnect' && walletProvider?.disconnect) {
+      try {
+        await walletProvider.disconnect();
+      } catch (error) {
+        console.error('Error disconnecting WalletConnect:', error);
+      }
+    }
+
     setIsConnected(false);
     setAccount("");
     setWalletInfo(null);
@@ -400,6 +476,8 @@ export default function Navbar({
     setCurrentNetwork(null);
     setCurrentChainId(0);
     setIsOwner(false);
+    setWalletProvider(null);
+    setWalletType(null);
   };
 
   const navItems = [
@@ -411,11 +489,9 @@ export default function Navbar({
 
   return (
     <>
-      {/* Glassmorphism backdrop */}
       <div className="fixed inset-x-0 top-0 h-20 bg-gradient-to-b from-black/20 via-black/10 to-transparent backdrop-blur-md z-40" />
       
       <header className="fixed inset-x-0 top-0 flex items-center justify-between px-4 md:px-8 py-4 z-50">
-        {/* Logo Section */}
         <div className="flex items-center space-x-3">
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg blur-sm opacity-75" />
@@ -431,7 +507,6 @@ export default function Navbar({
           </button>
         </div>
 
-        {/* Navigation Links */}
         <nav className="hidden md:flex items-center space-x-1 bg-black/20 border border-white/10 rounded-xl p-1 backdrop-blur-sm">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -457,7 +532,6 @@ export default function Navbar({
           })}
         </nav>
 
-        {/* Mobile Navigation */}
         <nav className="flex md:hidden items-center space-x-1 bg-black/20 border border-white/10 rounded-lg p-1 backdrop-blur-sm">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -480,7 +554,6 @@ export default function Navbar({
           })}
         </nav>
 
-        {/* Wallet Section */}
         <div className="flex items-center space-x-3">
           {!isConnected || networkError ? (
             <div className="flex flex-col items-end space-y-1">
@@ -512,7 +585,6 @@ export default function Navbar({
             </div>
           ) : (
             <div className="flex items-center space-x-3">
-              {/* Network Selector */}
               {currentNetwork && (
                 <div className="relative">
                   <button
@@ -530,7 +602,6 @@ export default function Navbar({
                     }`} />
                   </button>
 
-                  {/* Network Dropdown */}
                   {isNetworkDropdownOpen && (
                     <>
                       <div 
@@ -570,7 +641,7 @@ export default function Navbar({
                               {currentNetwork.chainId === network.chainId && (
                                 <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
                                   <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                   </svg>
                                 </div>
                               )}
@@ -583,7 +654,6 @@ export default function Navbar({
                 </div>
               )}
 
-              {/* Cart Button */}
               <Button 
                 size="sm" 
                 variant="outline"
@@ -592,12 +662,13 @@ export default function Navbar({
                 <ShoppingCart className="h-4 w-4" />
               </Button>
 
-              {/* Wallet Profile */}
               <div className="relative">
                 <WalletProfileDropdown
                   account={account}
                   balance={walletInfo ? `${walletInfo.balance} ${currentNetwork?.symbol || 'ETH'}` : "0 ETH"}
                   onDisconnect={handleDisconnect}
+                  walletType={walletType}
+                  currentNetwork={currentNetwork}
                 />
               </div>
             </div>

@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { AlertCircle, ExternalLink, Heart, Loader2, ShoppingCart, X } from "lucide-react";
+import { AlertCircle, ExternalLink, Heart, Loader2, ShoppingCart, X } from 'lucide-react';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
-import React, { useCallback, useEffect, useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
+import React, { useCallback, useEffect, useState } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 
-import { Button } from "@/app/components/ui/button";
-import Image from "next/image";
-import { Input } from "@/app/components/ui/input";
-import { blockchainService } from "@/lib/blockchain";
+import { Button } from '@/app/components/ui/button';
+import Image from 'next/image';
+import { Input } from '@/app/components/ui/input';
+import { blockchainService } from '@/lib/blockchain';
 import { getNetworkConfig } from '@/lib/networks';
 
 interface NFT {
@@ -65,19 +65,19 @@ interface ItemWithMetadata extends BlockchainItem {
 const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId }) => {
   const [ownedNFTs, setOwnedNFTs] = useState<NFT[]>([]);
   const [listedNFTs, setListedNFTs] = useState<NFT[]>([]);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"owned" | "listed">("owned");
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'owned' | 'listed'>('owned');
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState<string>('');
   const [likedNFTs, setLikedNFTs] = useState<Set<number>>(new Set());
   const [likingNFT, setLikingNFT] = useState<number | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
-  
+
   // List for sale modal
   const [listingModalOpen, setListingModalOpen] = useState(false);
   const [selectedNFTForListing, setSelectedNFTForListing] = useState<NFT | null>(null);
-  const [listingPrice, setListingPrice] = useState("");
+  const [listingPrice, setListingPrice] = useState('');
   const [isListing, setIsListing] = useState(false);
 
   // Cancel listing
@@ -94,17 +94,17 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
 
     try {
       setLoading(true);
-      setError("");
-      
+      setError('');
+
       console.log('Loading NFTs for account:', account);
 
       // Fetch owned and listed NFTs
       const [myItems, listedItems] = await Promise.all([
-        blockchainService.fetchMyNFTs().catch(err => {
+        blockchainService.fetchMyNFTs().catch((err) => {
           console.error('Error fetching my NFTs:', err);
           return [];
         }),
-        blockchainService.fetchListedItems().catch(err => {
+        blockchainService.fetchListedItems().catch((err) => {
           console.error('Error fetching listed items:', err);
           return [];
         })
@@ -132,16 +132,16 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
 
         return itemsWithMetadata
           .filter((result): result is PromiseFulfilledResult<ItemWithMetadata> => result.status === 'fulfilled')
-          .map(result => result.value)
+          .map((result) => result.value)
           .map((item) => ({
             id: item.tokenId,
             title: item.metadata?.name || `NFT #${item.tokenId}`,
-            description: item.metadata?.description || "No description available",
-            image: item.metadata?.image || "/placeholder-nft.png",
+            description: item.metadata?.description || 'No description available',
+            image: item.metadata?.image || '/placeholder-nft.png',
             price: `${item.price} ${networkSymbol}`,
             creator: item.seller,
             likes: item.likes,
-            category: item.category || "uncategorized",
+            category: item.category || 'uncategorized',
             tokenId: item.tokenId,
             owner: item.owner,
             sold: item.sold,
@@ -151,18 +151,15 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
           }));
       };
 
-      const [owned, listed] = await Promise.all([
-        loadNFTData(myItems, false),
-        loadNFTData(listedItems, true)
-      ]);
+      const [owned, listed] = await Promise.all([loadNFTData(myItems, false), loadNFTData(listedItems, true)]);
 
       console.log('Processed NFTs:', { owned, listed });
 
       setOwnedNFTs(owned);
       setListedNFTs(listed);
     } catch (error) {
-      console.error("Error loading my NFTs:", error);
-      setError("Failed to load your NFTs. Please try refreshing the page.");
+      console.error('Error loading my NFTs:', error);
+      setError('Failed to load your NFTs. Please try refreshing the page.');
     } finally {
       setLoading(false);
     }
@@ -170,13 +167,13 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
 
   const loadLikedNFTs = useCallback(async (): Promise<void> => {
     if (!account) return;
-    
+
     try {
       const allNFTs = [...ownedNFTs, ...listedNFTs];
       if (allNFTs.length === 0) return;
-      
+
       const liked = new Set<number>();
-      
+
       await Promise.allSettled(
         allNFTs.map(async (nft) => {
           try {
@@ -189,10 +186,10 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
           }
         })
       );
-      
+
       setLikedNFTs(liked);
     } catch (error) {
-      console.error("Error loading liked NFTs:", error);
+      console.error('Error loading liked NFTs:', error);
     }
   }, [account, ownedNFTs, listedNFTs]);
 
@@ -214,40 +211,38 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
 
   const toggleLikeNFT = async (nft: NFT): Promise<void> => {
     if (!isConnected) {
-      alert("Please connect your wallet to like NFTs");
+      alert('Please connect your wallet to like NFTs');
       return;
     }
 
     try {
       setLikingNFT(nft.tokenId);
-      
+
       const hasLiked = likedNFTs.has(nft.tokenId);
-      
+
       if (hasLiked) {
         await blockchainService.unlikeNFT(nft.tokenId);
-        setLikedNFTs(prev => {
+        setLikedNFTs((prev) => {
           const newSet = new Set(prev);
           newSet.delete(nft.tokenId);
           return newSet;
         });
-        
+
         // Update local likes count
-        const updateNFTs = (nfts: NFT[]) => 
-          nfts.map(n => n.tokenId === nft.tokenId ? { ...n, likes: n.likes - 1 } : n);
+        const updateNFTs = (nfts: NFT[]) => nfts.map((n) => (n.tokenId === nft.tokenId ? { ...n, likes: n.likes - 1 } : n));
         setOwnedNFTs(updateNFTs);
         setListedNFTs(updateNFTs);
       } else {
         await blockchainService.likeNFT(nft.tokenId);
-        setLikedNFTs(prev => new Set(prev).add(nft.tokenId));
-        
+        setLikedNFTs((prev) => new Set(prev).add(nft.tokenId));
+
         // Update local likes count
-        const updateNFTs = (nfts: NFT[]) => 
-          nfts.map(n => n.tokenId === nft.tokenId ? { ...n, likes: n.likes + 1 } : n);
+        const updateNFTs = (nfts: NFT[]) => nfts.map((n) => (n.tokenId === nft.tokenId ? { ...n, likes: n.likes + 1 } : n));
         setOwnedNFTs(updateNFTs);
         setListedNFTs(updateNFTs);
       }
     } catch (error) {
-      console.error("Error toggling like:", error);
+      console.error('Error toggling like:', error);
       alert(`Error ${likedNFTs.has(nft.tokenId) ? 'unliking' : 'liking'} NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLikingNFT(null);
@@ -256,54 +251,43 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
 
   const openListingModal = (nft: NFT) => {
     setSelectedNFTForListing(nft);
-    setListingPrice("");
+    setListingPrice('');
     setListingModalOpen(true);
   };
 
   const handleListForSale = async () => {
     if (!selectedNFTForListing) return;
-    
+
     const price = parseFloat(listingPrice);
     if (isNaN(price) || price <= 0) {
-      alert("Please enter a valid price greater than 0");
+      alert('Please enter a valid price greater than 0');
       return;
     }
 
     try {
       setIsListing(true);
-      
+
       const listingFee = await blockchainService.getListingPrice();
-      
-      const confirmed = window.confirm(
-        `You will need to pay a listing fee of ${listingFee} ${networkSymbol}.\n\n` +
-        `Your NFT will be listed for ${listingPrice} ${networkSymbol}.\n\n` +
-        `Do you want to proceed?`
-      );
-      
+
+      const confirmed = window.confirm(`You will need to pay a listing fee of ${listingFee} ${networkSymbol}.\n\n` + `Your NFT will be listed for ${listingPrice} ${networkSymbol}.\n\n` + `Do you want to proceed?`);
+
       if (!confirmed) {
         setIsListing(false);
         return;
       }
 
-      const txHash = await blockchainService.listNFTForSale(
-        selectedNFTForListing.tokenId,
-        listingPrice
-      );
+      const txHash = await blockchainService.listNFTForSale(selectedNFTForListing.tokenId, listingPrice);
 
-      alert(
-        `NFT listed successfully!\n\n` +
-        `Transaction Hash: ${txHash}\n\n` +
-        `You can view it on ${networkConfig?.blockExplorer}/tx/${txHash}`
-      );
-      
+      alert(`NFT listed successfully!\n\n` + `Transaction Hash: ${txHash}\n\n` + `You can view it on ${networkConfig?.blockExplorer}/tx/${txHash}`);
+
       setListingModalOpen(false);
       setSelectedNFTForListing(null);
-      setListingPrice("");
-      
+      setListingPrice('');
+
       // Reload NFTs
       await loadMyNFTs();
     } catch (error) {
-      console.error("Error listing NFT:", error);
+      console.error('Error listing NFT:', error);
       alert(`Failed to list NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsListing(false);
@@ -311,28 +295,21 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
   };
 
   const handleCancelListing = async (nft: NFT) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to cancel the listing for "${nft.title}"?\n\n` +
-      `The NFT will be returned to your wallet.`
-    );
-    
+    const confirmed = window.confirm(`Are you sure you want to cancel the listing for "${nft.title}"?\n\n` + `The NFT will be returned to your wallet.`);
+
     if (!confirmed) return;
 
     try {
       setCancelingListing(nft.tokenId);
-      
+
       const txHash = await blockchainService.cancelListing(nft.tokenId);
-      
-      alert(
-        `Listing canceled successfully!\n\n` +
-        `Transaction Hash: ${txHash}\n\n` +
-        `Your NFT has been returned to your wallet.`
-      );
-      
+
+      alert(`Listing canceled successfully!\n\n` + `Transaction Hash: ${txHash}\n\n` + `Your NFT has been returned to your wallet.`);
+
       // Reload NFTs
       await loadMyNFTs();
     } catch (error) {
-      console.error("Error canceling listing:", error);
+      console.error('Error canceling listing:', error);
       alert(`Failed to cancel listing: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setCancelingListing(null);
@@ -340,17 +317,14 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
   };
 
   const handleImageError = (tokenId: number) => {
-    setImageErrors(prev => new Set(prev).add(tokenId));
+    setImageErrors((prev) => new Set(prev).add(tokenId));
   };
 
-  const currentNFTs = activeTab === "owned" ? ownedNFTs : listedNFTs;
-  
+  const currentNFTs = activeTab === 'owned' ? ownedNFTs : listedNFTs;
+
   const filteredNFTs: NFT[] = currentNFTs.filter((nft: NFT) => {
-    const matchesSearch =
-      nft.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      nft.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "all" || nft.category === selectedCategory;
+    const matchesSearch = nft.title.toLowerCase().includes(searchQuery.toLowerCase()) || nft.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || nft.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -358,9 +332,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
     return (
       <div className="flex flex-col justify-center items-center h-64 text-center">
         <div className="text-white text-xl mb-4">Connect Your Wallet</div>
-        <div className="text-white/70">
-          Please connect your wallet to view your NFT collection
-        </div>
+        <div className="text-white/70">Please connect your wallet to view your NFT collection</div>
       </div>
     );
   }
@@ -399,20 +371,12 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
             {ownedNFTs.length} owned • {listedNFTs.length} listed for sale
           </p>
         </div>
-        
+
         <div className="flex gap-2">
-          <Button
-            variant={activeTab === "owned" ? "default" : "outline"}
-            onClick={() => setActiveTab("owned")}
-            className={activeTab === "owned" ? "bg-purple-600" : "bg-white/10 text-white"}
-          >
+          <Button variant={activeTab === 'owned' ? 'default' : 'outline'} onClick={() => setActiveTab('owned')} className={activeTab === 'owned' ? 'bg-purple-600' : 'bg-white/10 text-white'}>
             Owned ({ownedNFTs.length})
           </Button>
-          <Button
-            variant={activeTab === "listed" ? "default" : "outline"}
-            onClick={() => setActiveTab("listed")}
-            className={activeTab === "listed" ? "bg-purple-600" : "bg-white/10 text-white"}
-          >
+          <Button variant={activeTab === 'listed' ? 'default' : 'outline'} onClick={() => setActiveTab('listed')} className={activeTab === 'listed' ? 'bg-purple-600' : 'bg-white/10 text-white'}>
             Listed ({listedNFTs.length})
           </Button>
         </div>
@@ -420,12 +384,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <Input
-          placeholder="Search your NFTs..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/60"
-        />
+        <Input placeholder="Search your NFTs..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/60" />
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="w-full sm:w-48 bg-white/10 border-white/20 text-white">
             <SelectValue placeholder="Category" />
@@ -447,16 +406,8 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
         <div className="text-center text-white/70 py-12">
           {currentNFTs.length === 0 ? (
             <>
-              <p className="text-lg mb-2">
-                {activeTab === "owned" 
-                  ? "You don't own any NFTs yet" 
-                  : "You haven't listed any NFTs for sale"}
-              </p>
-              <p className="text-sm">
-                {activeTab === "owned"
-                  ? "Start by purchasing NFTs from the marketplace or creating your own!"
-                  : "List your owned NFTs for sale to start earning!"}
-              </p>
+              <p className="text-lg mb-2">{activeTab === 'owned' ? "You don't own any NFTs yet" : "You haven't listed any NFTs for sale"}</p>
+              <p className="text-sm">{activeTab === 'owned' ? 'Start by purchasing NFTs from the marketplace or creating your own!' : 'List your owned NFTs for sale to start earning!'}</p>
             </>
           ) : (
             <>
@@ -471,15 +422,7 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
             <Card key={nft.id} className="bg-white/5 border-white/20 overflow-hidden hover:border-white/40 transition-all">
               <div className="relative">
                 {!imageErrors.has(nft.tokenId) ? (
-                  <Image
-                    src={nft.image}
-                    alt={nft.title}
-                    width={400}
-                    height={256}
-                    className="w-full h-64 object-cover"
-                    unoptimized={nft.image.includes('ipfs') || nft.image.includes('pinata')}
-                    onError={() => handleImageError(nft.tokenId)}
-                  />
+                  <Image src={nft.image} alt={nft.title} width={400} height={256} className="w-full h-64 object-cover" unoptimized={nft.image.includes('ipfs') || nft.image.includes('pinata')} onError={() => handleImageError(nft.tokenId)} />
                 ) : (
                   <div className="w-full h-64 bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
                     <div className="text-center p-4">
@@ -488,18 +431,8 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
                     </div>
                   </div>
                 )}
-                
-                <div className="absolute top-2 right-2">
-                  {nft.isListed ? (
-                    <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                      LISTED
-                    </div>
-                  ) : (
-                    <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                      OWNED
-                    </div>
-                  )}
-                </div>
+
+                <div className="absolute top-2 right-2">{nft.isListed ? <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">LISTED</div> : <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">OWNED</div>}</div>
               </div>
 
               <CardContent className="p-4 space-y-3">
@@ -514,37 +447,16 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
                 )}
 
                 <div className="flex items-center justify-between">
-                  <p className="text-white/60 text-xs truncate">
-                    Token #{nft.tokenId}
-                  </p>
-                  <button
-                    onClick={() => toggleLikeNFT(nft)}
-                    disabled={likingNFT === nft.tokenId}
-                    className="flex items-center space-x-1 hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {likingNFT === nft.tokenId ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-red-400" />
-                    ) : (
-                      <Heart 
-                        className={`h-4 w-4 ${
-                          likedNFTs.has(nft.tokenId) 
-                            ? "text-red-500 fill-red-500" 
-                            : "text-red-400"
-                        }`} 
-                      />
-                    )}
+                  <p className="text-white/60 text-xs truncate">Token #{nft.tokenId}</p>
+                  <button onClick={() => toggleLikeNFT(nft)} disabled={likingNFT === nft.tokenId} className="flex items-center space-x-1 hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
+                    {likingNFT === nft.tokenId ? <Loader2 className="h-4 w-4 animate-spin text-red-400" /> : <Heart className={`h-4 w-4 ${likedNFTs.has(nft.tokenId) ? 'text-red-500 fill-red-500' : 'text-red-400'}`} />}
                     <span className="text-white/70 text-sm">{nft.likes}</span>
                   </button>
                 </div>
 
                 {/* Action Buttons */}
                 {nft.isListed ? (
-                  <Button
-                    onClick={() => handleCancelListing(nft)}
-                    disabled={cancelingListing === nft.tokenId}
-                    variant="destructive"
-                    className="w-full"
-                  >
+                  <Button onClick={() => handleCancelListing(nft)} disabled={cancelingListing === nft.tokenId} variant="destructive" className="w-full">
                     {cancelingListing === nft.tokenId ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -558,22 +470,14 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
                     )}
                   </Button>
                 ) : (
-                  <Button
-                    onClick={() => openListingModal(nft)}
-                    className="w-full bg-purple-600 hover:bg-purple-700"
-                  >
+                  <Button onClick={() => openListingModal(nft)} className="w-full bg-purple-600 hover:bg-purple-700">
                     <ShoppingCart className="mr-2 h-4 w-4" />
                     List for Sale
                   </Button>
                 )}
 
                 {networkConfig && (
-                  <a
-                    href={`${networkConfig.blockExplorer}/token/${networkConfig.contractAddress}?a=${nft.tokenId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center text-purple-400 hover:text-purple-300 text-sm"
-                  >
+                  <a href={`${networkConfig.blockExplorer}/token/${networkConfig.contractAddress}?a=${nft.tokenId}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center text-purple-400 hover:text-purple-300 text-sm">
                     <ExternalLink className="w-3 h-3 mr-1" />
                     View on Explorer
                   </a>
@@ -589,51 +493,28 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
         <DialogContent className="bg-neutral-900 border-neutral-800 text-white">
           <DialogHeader>
             <DialogTitle>List NFT for Sale</DialogTitle>
-            <DialogDescription className="text-white/70">
-              Set a price for your NFT to list it on the marketplace
-            </DialogDescription>
+            <DialogDescription className="text-white/70">Set a price for your NFT to list it on the marketplace</DialogDescription>
           </DialogHeader>
 
           {selectedNFTForListing && (
             <div className="space-y-4">
               <div className="flex items-center space-x-4 p-3 bg-white/5 rounded-lg">
                 {!imageErrors.has(selectedNFTForListing.tokenId) ? (
-                  <Image
-                    src={selectedNFTForListing.image}
-                    alt={selectedNFTForListing.title}
-                    width={80}
-                    height={80}
-                    className="rounded object-cover"
-                    unoptimized
-                  />
+                  <Image src={selectedNFTForListing.image} alt={selectedNFTForListing.title} width={80} height={80} className="rounded object-cover" unoptimized />
                 ) : (
                   <div className="w-20 h-20 bg-purple-500/20 rounded flex items-center justify-center">
                     <span className="text-2xl">🖼️</span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-white font-semibold truncate">
-                    {selectedNFTForListing.title}
-                  </h4>
-                  <p className="text-white/60 text-sm">
-                    Token ID: #{selectedNFTForListing.tokenId}
-                  </p>
+                  <h4 className="text-white font-semibold truncate">{selectedNFTForListing.title}</h4>
+                  <p className="text-white/60 text-sm">Token ID: #{selectedNFTForListing.tokenId}</p>
                 </div>
               </div>
 
               <div>
-                <label className="text-white text-sm font-medium block mb-2">
-                  Sale Price ({networkSymbol})
-                </label>
-                <Input
-                  type="number"
-                  step="0.001"
-                  min="0.001"
-                  placeholder="0.1"
-                  value={listingPrice}
-                  onChange={(e) => setListingPrice(e.target.value)}
-                  className="bg-neutral-800 border-neutral-700 text-white"
-                />
+                <label className="text-white text-sm font-medium block mb-2">Sale Price ({networkSymbol})</label>
+                <Input type="number" step="0.001" min="0.001" placeholder="0.1" value={listingPrice} onChange={(e) => setListingPrice(e.target.value)} className="bg-neutral-800 border-neutral-700 text-white" />
               </div>
 
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
@@ -647,19 +528,10 @@ const MyNFTs: React.FC<MyNFTsProps> = ({ isConnected, account, currentChainId })
               </div>
 
               <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setListingModalOpen(false)}
-                  className="flex-1 text-black"
-                  disabled={isListing}
-                >
+                <Button variant="outline" onClick={() => setListingModalOpen(false)} className="flex-1 text-black" disabled={isListing}>
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleListForSale}
-                  disabled={isListing || !listingPrice || parseFloat(listingPrice) <= 0}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700"
-                >
+                <Button onClick={handleListForSale} disabled={isListing || !listingPrice || parseFloat(listingPrice) <= 0} className="flex-1 bg-purple-600 hover:bg-purple-700">
                   {isListing ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

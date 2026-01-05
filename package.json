@@ -20,7 +20,9 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.12",
     "@rainbow-me/rainbowkit": "^2.2.6",
+    "@tanstack/react-query": "^5.90.16",
     "@wagmi/core": "^2.17.3",
+    "@walletconnect/ethereum-provider": "^2.23.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "ethers": "^6.14.3",
@@ -30,8 +32,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.3.0",
-    "viem": "^2.30.6",
-    "wagmi": "^2.15.6"
+    "viem": "^2.43.5",
+    "wagmi": "^2.19.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

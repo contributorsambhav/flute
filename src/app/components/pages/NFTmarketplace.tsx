@@ -93,9 +93,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
         })
       );
 
-      const validItems = itemsWithMetadata
-        .filter((result) => result.status === 'fulfilled')
-        .map((result) => (result as PromiseFulfilledResult<MarketItem>).value);
+      const validItems = itemsWithMetadata.filter((result) => result.status === 'fulfilled').map((result) => (result as PromiseFulfilledResult<MarketItem>).value);
 
       console.log('Items with metadata:', validItems);
 
@@ -132,7 +130,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
 
     try {
       const liked = new Set<number>();
-      
+
       await Promise.allSettled(
         nfts.map(async (nft) => {
           try {
@@ -145,7 +143,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
           }
         })
       );
-      
+
       setLikedNFTs(liked);
     } catch (error) {
       console.error('Error loading liked NFTs:', error);
@@ -173,11 +171,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
       return;
     }
 
-    const confirmed = window.confirm(
-      `Purchase NFT "${nft.title}" for ${nft.price}?\n\n` +
-      `You will pay: ${nft.rawPrice} ${networkSymbol}\n\n` +
-      `Do you want to proceed?`
-    );
+    const confirmed = window.confirm(`Purchase NFT "${nft.title}" for ${nft.price}?\n\n` + `You will pay: ${nft.rawPrice} ${networkSymbol}\n\n` + `Do you want to proceed?`);
 
     if (!confirmed) return;
 
@@ -186,13 +180,9 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
       console.log('Buying NFT:', nft.tokenId, 'Price:', nft.rawPrice);
 
       const result = await blockchainService.buyNFT(nft.tokenId, nft.rawPrice);
-      
-      alert(
-        `NFT purchased successfully!\n\n` +
-        `Transaction Hash: ${result.transactionHash}\n\n` +
-        `You can view it on ${networkConfig?.blockExplorer}/tx/${result.transactionHash}`
-      );
-      
+
+      alert(`NFT purchased successfully!\n\n` + `Transaction Hash: ${result.transactionHash}\n\n` + `You can view it on ${networkConfig?.blockExplorer}/tx/${result.transactionHash}`);
+
       await loadNFTs();
     } catch (error) {
       console.error('Error buying NFT:', error);
@@ -220,23 +210,15 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
           newSet.delete(nft.tokenId);
           return newSet;
         });
-        setNfts((prevNfts) =>
-          prevNfts.map((n) => (n.tokenId === nft.tokenId ? { ...n, likes: Math.max(0, n.likes - 1) } : n))
-        );
+        setNfts((prevNfts) => prevNfts.map((n) => (n.tokenId === nft.tokenId ? { ...n, likes: Math.max(0, n.likes - 1) } : n)));
       } else {
         await blockchainService.likeNFT(nft.tokenId);
         setLikedNFTs((prev) => new Set(prev).add(nft.tokenId));
-        setNfts((prevNfts) =>
-          prevNfts.map((n) => (n.tokenId === nft.tokenId ? { ...n, likes: n.likes + 1 } : n))
-        );
+        setNfts((prevNfts) => prevNfts.map((n) => (n.tokenId === nft.tokenId ? { ...n, likes: n.likes + 1 } : n)));
       }
     } catch (error) {
       console.error('Error toggling like:', error);
-      alert(
-        `Error ${likedNFTs.has(nft.tokenId) ? 'unliking' : 'liking'} NFT: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`
-      );
+      alert(`Error ${likedNFTs.has(nft.tokenId) ? 'unliking' : 'liking'} NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLikingNFT(null);
     }
@@ -247,13 +229,11 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
   };
 
   const handleImageError = (tokenId: number) => {
-    setImageErrors(prev => new Set(prev).add(tokenId));
+    setImageErrors((prev) => new Set(prev).add(tokenId));
   };
 
   const filteredNFTs: NFT[] = nfts.filter((nft: NFT) => {
-    const matchesSearch =
-      nft.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      nft.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = nft.title.toLowerCase().includes(searchQuery.toLowerCase()) || nft.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || nft.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -272,13 +252,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row gap-4">
-        <Input
-          type="text"
-          placeholder="Search NFTs..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/60"
-        />
+        <Input type="text" placeholder="Search NFTs..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/60" />
         <Select value={selectedCategory} onValueChange={handleCategoryChange}>
           <SelectTrigger className="w-full sm:w-[200px] bg-white/10 border-white/20 text-white">
             <SelectValue placeholder="Category" />
@@ -296,46 +270,23 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
 
       {filteredNFTs.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-white/60 text-lg mb-2">
-            {nfts.length === 0 
-              ? "No NFTs listed on the marketplace yet." 
-              : "No NFTs found matching your criteria."}
-          </p>
-          <p className="text-white/40">
-            {nfts.length === 0
-              ? "Be the first to create and list an NFT!"
-              : "Try adjusting your search or category filter."}
-          </p>
+          <p className="text-white/60 text-lg mb-2">{nfts.length === 0 ? 'No NFTs listed on the marketplace yet.' : 'No NFTs found matching your criteria.'}</p>
+          <p className="text-white/40">{nfts.length === 0 ? 'Be the first to create and list an NFT!' : 'Try adjusting your search or category filter.'}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredNFTs.map((nft: NFT) => (
-            <div
-              key={nft.tokenId}
-              className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 hover:border-white/20 transition-all hover:transform hover:scale-105"
-            >
+            <div key={nft.tokenId} className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 hover:border-white/20 transition-all hover:transform hover:scale-105">
               <div className="relative h-64 bg-white/5">
                 {!imageErrors.has(nft.tokenId) ? (
-                  <Image
-                    src={nft.image}
-                    alt={nft.title}
-                    fill
-                    className="object-cover"
-                    unoptimized={nft.image.includes('ipfs') || nft.image.includes('pinata')}
-                    onError={() => handleImageError(nft.tokenId)}
-                  />
+                  <Image src={nft.image} alt={nft.title} fill className="object-cover" unoptimized={nft.image.includes('ipfs') || nft.image.includes('pinata')} onError={() => handleImageError(nft.tokenId)} />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
                     <div className="text-center p-4">
                       <div className="text-white/50 text-4xl mb-2">🖼️</div>
                       <div className="text-white/70 text-sm">Image unavailable</div>
                       {nft.image.includes('ipfs') && (
-                        <a 
-                          href={nft.image}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 text-xs underline mt-2 inline-block"
-                        >
+                        <a href={nft.image} target="_blank" rel="noopener noreferrer" className="text-blue-400 text-xs underline mt-2 inline-block">
                           View on IPFS
                         </a>
                       )}
@@ -350,37 +301,15 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
 
                 <div className="flex items-center justify-between">
                   <span className="text-white font-bold">{nft.price}</span>
-                  <button
-                    onClick={() => toggleLikeNFT(nft)}
-                    disabled={!isConnected || likingNFT === nft.tokenId}
-                    className="flex items-center space-x-1 hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {likingNFT === nft.tokenId ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-red-400" />
-                    ) : (
-                      <Heart
-                        className={`w-5 h-5 ${
-                          likedNFTs.has(nft.tokenId) ? 'fill-red-500 text-red-500' : 'text-white/60'
-                        }`}
-                      />
-                    )}
+                  <button onClick={() => toggleLikeNFT(nft)} disabled={!isConnected || likingNFT === nft.tokenId} className="flex items-center space-x-1 hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
+                    {likingNFT === nft.tokenId ? <Loader2 className="w-5 h-5 animate-spin text-red-400" /> : <Heart className={`w-5 h-5 ${likedNFTs.has(nft.tokenId) ? 'fill-red-500 text-red-500' : 'text-white/60'}`} />}
                     <span className="text-white/60 text-sm">{nft.likes}</span>
                   </button>
                 </div>
 
-                <p className="text-white/40 text-xs">
-                  by {formatAddress(nft.creator)}
-                </p>
+                <p className="text-white/40 text-xs">by {formatAddress(nft.creator)}</p>
 
-                <Button
-                  onClick={() => buyNFT(nft)}
-                  disabled={
-                    !isConnected || 
-                    buyingNFT === nft.tokenId || 
-                    nft.owner.toLowerCase() === account?.toLowerCase()
-                  }
-                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-                >
+                <Button onClick={() => buyNFT(nft)} disabled={!isConnected || buyingNFT === nft.tokenId || nft.owner.toLowerCase() === account?.toLowerCase()} className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50">
                   {buyingNFT === nft.tokenId ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -394,12 +323,7 @@ const NFTMarketplace: React.FC<NFTMarketplaceProps> = ({ isConnected, account, c
                 </Button>
 
                 {networkConfig && (
-                  <a
-                    href={`${networkConfig.blockExplorer}/token/${networkConfig.contractAddress}?a=${nft.tokenId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center text-purple-400 hover:text-purple-300 text-sm"
-                  >
+                  <a href={`${networkConfig.blockExplorer}/token/${networkConfig.contractAddress}?a=${nft.tokenId}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center text-purple-400 hover:text-purple-300 text-sm">
                     <ExternalLink className="w-3 h-3 mr-1" />
                     View on Explorer
                   </a>
