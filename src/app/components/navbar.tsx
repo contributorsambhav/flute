@@ -211,7 +211,7 @@ export default function Navbar({
 
   const checkConnection = async (address: string) => {
     if (!walletProvider) {
-      setNetworkError("Wallet provider not found");
+      // setNetworkError("Wallet provider not found");
       return;
     }
 
